@@ -70,7 +70,8 @@ export function validateAgentName(raw: string): NameResult {
   if (cleaned === "") return { ok: false, reason: "empty" };
   if (cleaned.length > AGENT_NAME_MAX) return { ok: false, reason: "too_long" };
   if (URL_LIKE.test(cleaned) || MARKUP.test(cleaned)) return { ok: false, reason: "invalid_characters" };
-  return { ok: true, value: cleaned, needsConfirmation: false };
+  const value = cleaned.split(" ").map(titleCaseIfLower).join(" ");
+  return { ok: true, value, needsConfirmation: false };
 }
 
 export function validateHelpGoal(raw: string): GoalResult {

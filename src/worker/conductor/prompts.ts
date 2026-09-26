@@ -116,3 +116,20 @@ export function insightInstructions(helpGoal: string | null): string {
   return `You are a personal assistant who just got read-only access to the user's Gmail.
 Given a summary of their unread inbox from the last 7 days${helpGoal ? ` and their goal ("${helpGoal}")` : ""}, write ONE specific, useful observation or offer in at most 2 sentences — e.g. who is waiting on them, what can be batch-archived, or what to handle first. Be concrete (use sender names or counts). No preamble.`;
 }
+
+const DEFAULT_LINES: Record<ReturnType<typeof nextGoal>, string> = {
+  name_agent: "So — what do you want to call me?",
+  offer_call: "Mind if I give you a quick call to get set up? Two minutes, tops.",
+  on_call: "I'm ringing you now 📞",
+  confirm_user_name: "Just so I get it right — is that really what you'd like me to call you?",
+  user_name: "What should I call you?",
+  help_goal: "What's one thing you'd love a hand with right now?",
+  gmail: "Want to connect Gmail? That's where I can really start helping.",
+  wrap_up: "You're all set! Want me to take you into the app?",
+  done: "I'm here whenever you need me.",
+};
+
+/** Used when the model produced no text (never leave the user hanging). */
+export function defaultLine(state: SessionState): string {
+  return DEFAULT_LINES[nextGoal(state)];
+}

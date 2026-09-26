@@ -72,3 +72,12 @@ describe("joke detection avoids false positives", () => {
     expect(validateUserName(raw)).toMatchObject({ ok: true, needsConfirmation: false });
   });
 });
+
+describe("agent name casing", () => {
+  it("capitalizes all-lowercase names but keeps deliberate casing", () => {
+    expect(validateAgentName("jarvis")).toMatchObject({ ok: true, value: "Jarvis" });
+    expect(validateAgentName("mr robot")).toMatchObject({ ok: true, value: "Mr Robot" });
+    expect(validateAgentName("HAL")).toMatchObject({ ok: true, value: "HAL" });
+    expect(validateAgentName("deGrasse")).toMatchObject({ ok: true, value: "deGrasse" });
+  });
+});
