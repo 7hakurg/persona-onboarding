@@ -273,7 +273,8 @@ A second failed call attempt stops offering calls proactively (user can still as
 - **Layout:** desktop shows a centered phone frame plus a collapsible "Behind the scenes"
   panel (slots, phase, call state, event log). Mobile shows the phone UI full-screen.
 - **Messages screen:** iMessage look; header with avatar and the agent's current name
-  (updates live when named); typing indicator; streaming assistant replies;
+  (updates live when named); typing indicator while a turn runs (replies are ~1–2s, so
+  token streaming is not used);
   contextual quick-reply chips; inline cards (missed call, call summary, Gmail connect,
   inbox insight).
 - **Call screens:** incoming (Accept/Decline, ringtone), active (timer, audio-level
