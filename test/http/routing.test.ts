@@ -66,3 +66,11 @@ describe("session routing", () => {
     expect(next).not.toBe(cookie);
   });
 });
+
+describe("client config", () => {
+  it("reports whether gmail is configured", async () => {
+    const res = await exports.default.fetch(`${ORIGIN}/api/config`);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ gmail: true });
+  });
+});

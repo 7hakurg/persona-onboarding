@@ -1,8 +1,9 @@
 import { getAgentByName, routeAgentRequest } from "agents";
 import { Hono } from "hono";
 import { AGENT_NAMESPACE, SELF_SESSION_NAME } from "../shared/rpc";
-import type { Env } from "./env";
+import { googleConfig, type Env } from "./env";
 import { isSameOrigin, newSessionId, readSessionId, sessionCookie } from "./http/session-cookie";
+import { registerGmailRoutes } from "./http/gmail-routes";
 import { log } from "./log";
 
 import type { OnboardingAgent } from "./agent/onboarding-agent";
@@ -13,6 +14,9 @@ export { BudgetDO } from "./limits/budget";
 const app = new Hono<{ Bindings: Env }>();
 
 app.get("/healthz", (c) => c.json({ ok: true }));
+registerGmailRoutes(app);
+
+app.get("/api/config", (c) => c.json({ gmail: googleConfig(c.env) !== null }));
 
 async function withinIpLimit(env: Env, request: Request): Promise<boolean> {
   const ip = request.headers.get("CF-Connecting-IP") ?? "local";

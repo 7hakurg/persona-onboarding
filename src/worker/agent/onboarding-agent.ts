@@ -18,10 +18,16 @@ import { appendEvent, appendMessage, markNudge, setTurnPending } from "../state/
 import { isCallLive } from "../state/selectors";
 import { CallController, type ScheduledCallback } from "../live/call-controller";
 import { createCallHost } from "./call-host";
+import { applyGmailCompletion } from "../gmail/apply";
+import type { GmailCompletion } from "../gmail/completion";
+import { composeInsight } from "../gmail/insight";
+import { slotValue } from "../state/selectors";
 import { TurnQueue } from "./turn-queue";
 
 const CHAT_WINDOW_KEY = "chat-window";
 const LAST_ACTIVITY_KEY = "last-activity";
+const GMAIL_NONCES_KEY = "gmail-nonces";
+const MAX_PENDING_NONCES = 5;
 const CLIENT_END_REASONS: ReadonlySet<CallEndReason> = new Set(["user_hangup", "page_closed", "mic_denied", "connection_failed"]);
 
 export class OnboardingAgent extends Agent<Env, SessionState> {
@@ -97,6 +103,31 @@ export class OnboardingAgent extends Agent<Env, SessionState> {
 
   async onGoodbyeTimeout(payload: { callId: string }): Promise<void> {
     await this.calls.onGoodbyeTimeout(payload);
+  }
+
+  async beginGmail(nonce: string, exp: number): Promise<void> {
+    const now = Date.now();
+    const pending = (await this.ctx.storage.get<Record<string, number>>(GMAIL_NONCES_KEY)) ?? {};
+    const live = Object.entries(pending).filter(([, e]) => e > now).slice(-(MAX_PENDING_NONCES - 1));
+    await this.ctx.storage.put(GMAIL_NONCES_KEY, Object.fromEntries([...live, [nonce, exp]]));
+  }
+
+  async hasPendingGmailNonce(nonce: string): Promise<boolean> {
+    const pending = (await this.ctx.storage.get<Record<string, number>>(GMAIL_NONCES_KEY)) ?? {};
+    return (pending[nonce] ?? 0) > Date.now();
+  }
+
+  /** Consumes the nonce (single use) and applies the outcome. Returns false for replays/expired links. */
+  async completeGmail(result: GmailCompletion): Promise<boolean> {
+    const pending = (await this.ctx.storage.get<Record<string, number>>(GMAIL_NONCES_KEY)) ?? {};
+    if ((pending[result.nonce] ?? 0) <= Date.now()) return false;
+    const { [result.nonce]: _used, ...rest } = pending;
+    await this.ctx.storage.put(GMAIL_NONCES_KEY, rest);
+    const insight = result.outcome === "connected" ? await composeInsight(this.llm(), result.snapshot, slotValue(this.state.slots.helpGoal)) : null;
+    const out = applyGmailCompletion(this.state, result, insight, { now: Date.now(), newId: () => crypto.randomUUID() });
+    this.setState(out.state);
+    this.calls.notifyExternalChange(out.callNote);
+    return true;
   }
 
   async scheduleCallback(delaySeconds: number, callback: ScheduledCallback, payload: { callId: string }): Promise<void> {
