@@ -65,7 +65,7 @@ Cloudflare Worker (Hono router)
   ├─ /auth/google/start|callback → Google OAuth (tokens never persisted)
   └─ static assets (SPA)
 
-OnboardingAgent ── OpenAI Responses API (chat conductor, gpt-5.4-mini)
+OnboardingAgent ── OpenAI Responses API (chat conductor, gpt-6-luna)
                  ── OpenAI /v1/realtime/client_secrets (ephemeral key for the call)
                  ── Gmail API (one-shot inbox snapshot inside the OAuth callback)
 
@@ -263,7 +263,7 @@ A second failed call attempt stops offering calls proactively (user can still as
 ## 10. Configuration
 
 All tunables in one `config.ts` (model names, voice, limits, timeouts, budget), overridable
-by Worker vars. Models: chat `gpt-5.4-mini`, realtime `gpt-realtime-2.1`, transcription
+by Worker vars. Models: chat `gpt-6-luna` (reasoning effort `low`; benchmarked 2026-09-26: 0.9–1.7s, correct multi-slot tool calls, no hallucinated slots), realtime `gpt-realtime-2.1`, transcription
 `gpt-4o-mini-transcribe`.
 
 ## 11. Testing
