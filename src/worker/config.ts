@@ -32,6 +32,7 @@ export const CONFIG = {
     idleNudgeMs: 2 * 60_000,
     sidebandAttachRetries: 3,
     goodbyeGraceMs: 8_000,
+    turnDebounceMs: 400,
   },
   gmail: {
     scopes: [

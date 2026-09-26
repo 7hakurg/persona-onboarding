@@ -133,3 +133,10 @@ const DEFAULT_LINES: Record<ReturnType<typeof nextGoal>, string> = {
 export function defaultLine(state: SessionState): string {
   return DEFAULT_LINES[nextGoal(state)];
 }
+
+/** One gentle, deterministic nudge after a long silence. */
+export function idleNudge(state: SessionState): string {
+  return nextGoal(state) === "name_agent"
+    ? "No rush 🙂 If nothing comes to mind, I'm happy to just go by Persona — or just say \"skip\" and we'll sort the rest later."
+    : "Still there? Whenever you're ready — or just say \"skip\" and we'll sort the rest later.";
+}
