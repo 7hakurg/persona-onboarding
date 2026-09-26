@@ -1,9 +1,11 @@
-import { routeAgentRequest } from "agents";
+import { getAgentByName, routeAgentRequest } from "agents";
 import { Hono } from "hono";
 import { AGENT_NAMESPACE, SELF_SESSION_NAME } from "../shared/rpc";
 import type { Env } from "./env";
 import { isSameOrigin, newSessionId, readSessionId, sessionCookie } from "./http/session-cookie";
 import { log } from "./log";
+
+import type { OnboardingAgent } from "./agent/onboarding-agent";
 
 export { OnboardingAgent } from "./agent/onboarding-agent";
 export { BudgetDO } from "./limits/budget";
@@ -33,6 +35,16 @@ app.post("/api/reset", async (c) => {
   const secure = new URL(c.req.url).protocol === "https:";
   c.header("Set-Cookie", sessionCookie(newSessionId(), secure));
   return c.json({ ok: true });
+});
+
+app.post("/api/call-ended", async (c) => {
+  const sid = readSessionId(c.req.raw);
+  if (!sid) return c.body(null, 204);
+  const origin = c.req.header("Origin");
+  if (origin && origin !== new URL(c.req.url).origin) return c.body(null, 403);
+  const agent = (await getAgentByName(c.env.ONBOARDING_AGENT as never, sid)) as unknown as DurableObjectStub<OnboardingAgent>;
+  await agent.endCall("page_closed");
+  return c.body(null, 204);
 });
 
 app.all(`/agents/${AGENT_NAMESPACE}/:name{.+}`, async (c) => {

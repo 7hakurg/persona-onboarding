@@ -1,6 +1,6 @@
 import { Agent, callable, type Connection } from "agents";
-import type { CardData, ChatMessage, SessionState } from "../../shared/types";
-import type { RpcResult } from "../../shared/rpc";
+import type { CallEndReason, CardData, ChatMessage, SessionState } from "../../shared/types";
+import type { AcceptCallResult, RpcResult } from "../../shared/rpc";
 import { CONFIG } from "../config";
 import { runChatTurn } from "../conductor/chat-turn";
 import { GREETING_TEXT, idleNudge } from "../conductor/prompts";
@@ -14,22 +14,30 @@ import { slidingWindow } from "../limits/rate-window";
 import { log } from "../log";
 import { createInitialState } from "../state/initial";
 import { mergeTurnResult } from "../state/merge";
-import { appendEvent, appendMessage, beginCallAttempt, markNudge, setCall, setTurnPending } from "../state/reducers";
+import { appendEvent, appendMessage, markNudge, setTurnPending } from "../state/reducers";
 import { isCallLive } from "../state/selectors";
+import { CallController, type ScheduledCallback } from "../live/call-controller";
+import { createCallHost } from "./call-host";
 import { TurnQueue } from "./turn-queue";
 
 const CHAT_WINDOW_KEY = "chat-window";
 const LAST_ACTIVITY_KEY = "last-activity";
+const CLIENT_END_REASONS: ReadonlySet<CallEndReason> = new Set(["user_hangup", "page_closed", "mic_denied", "connection_failed"]);
 
 export class OnboardingAgent extends Agent<Env, SessionState> {
   override initialState: SessionState = createInitialState(Date.now());
   private readonly turns = new TurnQueue(() => this.runTurn(), CONFIG.timing.turnDebounceMs);
   private cachedLlm: LlmClient | null = null;
+  private readonly calls = new CallController(createCallHost(this, this.env));
 
   // ---- framework hooks -------------------------------------------------
 
   override validateStateChange(_next: SessionState, source: Connection | "server"): void {
     if (source !== "server") throw new Error("State is read-only for clients");
+  }
+
+  override async onStart(): Promise<void> {
+    await this.calls.recoverAfterRestart();
   }
 
   override async onConnect(): Promise<void> {
@@ -52,7 +60,48 @@ export class OnboardingAgent extends Agent<Env, SessionState> {
     return { ok: true };
   }
 
+  @callable()
+  async requestCall(): Promise<RpcResult> {
+    const result = await this.calls.ring();
+    if (result.ok) this.say("Calling you now 📞");
+    return result;
+  }
+
+  @callable()
+  async acceptCall(sdp: unknown): Promise<AcceptCallResult> {
+    return this.calls.accept(sdp);
+  }
+
+  @callable()
+  async declineCall(): Promise<RpcResult> {
+    await this.calls.decline();
+    return { ok: true };
+  }
+
+  @callable()
+  async endCall(reason: unknown): Promise<RpcResult> {
+    if (typeof reason !== "string" || !CLIENT_END_REASONS.has(reason as CallEndReason)) return { ok: false, error: "invalid" };
+    await this.calls.hangup(reason as CallEndReason);
+    return { ok: true };
+  }
+
   // ---- server-side API (DO RPC, not exposed to browsers) ---------------------
+
+  async onRingTimeout(payload: { callId: string }): Promise<void> {
+    await this.calls.onRingTimeout(payload);
+  }
+
+  async onMaxDuration(payload: { callId: string }): Promise<void> {
+    await this.calls.onMaxDuration(payload);
+  }
+
+  async onGoodbyeTimeout(payload: { callId: string }): Promise<void> {
+    await this.calls.onGoodbyeTimeout(payload);
+  }
+
+  async scheduleCallback(delaySeconds: number, callback: ScheduledCallback, payload: { callId: string }): Promise<void> {
+    await this.schedule(delaySeconds, callback, payload);
+  }
 
   async ensureGreeted(): Promise<void> {
     if (this.state.messages.length > 0) return;
@@ -94,12 +143,12 @@ export class OnboardingAgent extends Agent<Env, SessionState> {
     this.setState(fn(this.state));
   }
 
-  protected say(text: string, data?: CardData): void {
+  say(text: string, data?: CardData): void {
     const message: ChatMessage = { id: crypto.randomUUID(), at: Date.now(), role: "assistant", kind: data ? "card" : "text", text, ...(data ? { data } : {}) };
     this.update((s) => appendMessage(s, message));
   }
 
-  protected llm(): LlmClient {
+  llm(): LlmClient {
     if (this.cachedLlm) return this.cachedLlm;
     this.cachedLlm =
       this.env.FAKE_LLM === "1"
@@ -130,7 +179,7 @@ export class OnboardingAgent extends Agent<Env, SessionState> {
         this.say("Tap to connect Gmail — read-only, and you can disconnect anytime.", { card: "gmail", status: "pending" });
         return;
       case "ring":
-        await this.ring();
+        await this.calls.ring();
         return;
       case "graduated":
         this.update((s) => appendEvent(s, { at: Date.now(), type: "graduated", detail: "" }));
@@ -138,12 +187,6 @@ export class OnboardingAgent extends Agent<Env, SessionState> {
       case "end_call":
         return;
     }
-  }
-
-  protected async ring(): Promise<void> {
-    if (isCallLive(this.state)) return;
-    const callId = crypto.randomUUID();
-    this.update((s) => appendEvent(setCall(beginCallAttempt(s), { status: "ringing", callId, since: Date.now() }), { at: Date.now(), type: "call:ringing", detail: callId }));
   }
 
   private async scheduleIdleCheck(): Promise<void> {
