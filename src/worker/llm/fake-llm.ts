@@ -73,6 +73,10 @@ export function createFakeLlm(): LlmClient {
     async respond(req: LlmRequest): Promise<LlmResponse> {
       if (req.json) return structured(req.input);
       const goal = goalFrom(req.instructions);
+      const last = req.input.at(-1);
+      if (last?.type === "function_call_output" && last.output.includes("nudge_first")) {
+        return { outputText: "Before you go — connecting Gmail is where I'm most useful. Want to do that first, or skip it for now?", calls: [] };
+      }
       const text = lastUserText(req.input);
       if (text !== null && req.tools?.length) {
         const calls = extractCalls(text, goal);

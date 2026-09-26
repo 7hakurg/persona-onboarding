@@ -11,7 +11,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "cf-typegen": "wrangler types"
+    "cf-typegen": "wrangler types",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e:live": "LIVE_E2E=1 playwright test --project live"
   },
   "dependencies": {
     "agents": "^0.24.0",
@@ -30,6 +32,7 @@
     "@types/react-dom": "^19.3.0",
     "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^6.1.1",
+    "@vitest/coverage-istanbul": "^4.1.11",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.9.3",
     "vite": "^8.3.1",

@@ -22,5 +22,11 @@ export default defineConfig({
     include: ["test/**/*.test.ts"],
     // Durable Object cold starts in Miniflare can exceed the 5s default under parallel load.
     testTimeout: 20_000,
+    coverage: {
+      provider: "istanbul",
+      include: ["src/worker/**", "src/shared/**"],
+      reporter: ["text-summary", "text"],
+      thresholds: { lines: 80, functions: 80, branches: 75, statements: 80 },
+    },
   },
 });

@@ -38,3 +38,14 @@ describe("createFakeLlm", () => {
     expect(JSON.parse(res.outputText)).toEqual({ userName: "Sam", helpGoal: "travel" });
   });
 });
+
+describe("fake gmail nudge", () => {
+  it("nudges about gmail when graduate asks for it", async () => {
+    const res = await createFakeLlm().respond({
+      instructions: "Current goal: offer_call",
+      tools,
+      input: [user("skip"), { type: "function_call", call_id: "c", name: "graduate", arguments: "{}" }, { type: "function_call_output", call_id: "c", output: "{\"ok\":false,\"error\":\"nudge_first\"}" }],
+    });
+    expect(res.outputText).toMatch(/gmail/i);
+  });
+});
