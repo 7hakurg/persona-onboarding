@@ -1,4 +1,4 @@
-import type { Goal, MissingKey, Phase, SessionState, Slot } from "../../shared/types";
+import type { Goal, MissingKey, Phase, SessionState, Slot } from "./types";
 
 const ORDER: MissingKey[] = ["agentName", "userName", "helpGoal", "gmail"];
 

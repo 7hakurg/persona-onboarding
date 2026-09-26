@@ -6,7 +6,7 @@ import { executeTool, type Effect } from "../conductor/tools";
 import type { LlmClient } from "../llm/types";
 import { errorFields, log } from "../log";
 import { appendEvent, beginCallAttempt, setCall } from "../state/reducers";
-import { isCallLive } from "../state/selectors";
+import { isCallLive } from "../../shared/selectors";
 import type { LiveEvent } from "./events";
 import { applyExtracted, composeFollowup, extractFromTranscript } from "./post-call";
 import { commands, type SidebandHandlers, type SidebandLike } from "./sideband";

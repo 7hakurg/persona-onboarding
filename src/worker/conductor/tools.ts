@@ -8,7 +8,7 @@ import {
   setGmail,
   setSlot,
 } from "../state/reducers";
-import { isCallLive, isGmailDone, missingSlots, nextGoal } from "../state/selectors";
+import { isCallLive, isGmailDone, missingSlots, nextGoal } from "../../shared/selectors";
 import { validateAgentName, validateHelpGoal, validateUserName } from "./slots";
 import { TOOL_SPECS, isToolName, type ToolName } from "./tool-schemas";
 

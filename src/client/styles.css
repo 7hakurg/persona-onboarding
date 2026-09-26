@@ -1,1 +1,131 @@
 @import "tailwindcss";
+
+@theme {
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --color-imessage: #0a84ff;
+  --color-bubble-in: #e9e9eb;
+  --color-bubble-in-dark: #26252a;
+  --color-ios-green: #34c759;
+  --color-ios-red: #ff3b30;
+  --color-ios-gray: #8e8e93;
+  --color-ios-bg: #ffffff;
+  --color-ios-grouped: #f2f2f7;
+}
+
+:root {
+  color-scheme: light;
+  --page-bg: radial-gradient(1200px 800px at 20% 10%, #dfe7ff 0%, transparent 60%),
+    radial-gradient(900px 700px at 90% 90%, #ffe3f1 0%, transparent 60%), #f4f5f8;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--page-bg);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  color: #0b0b0c;
+}
+
+/* iMessage bubble tails */
+.bubble {
+  position: relative;
+  max-width: 78%;
+  padding: 7px 12px 8px;
+  border-radius: 18px;
+  line-height: 1.32;
+  font-size: 16px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.bubble-out {
+  background: var(--color-imessage);
+  color: white;
+  margin-left: auto;
+}
+.bubble-in {
+  background: var(--color-bubble-in);
+  color: #0b0b0c;
+}
+.bubble.tail-out::before,
+.bubble.tail-in::before {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  height: 17px;
+  width: 20px;
+}
+.bubble.tail-out::before {
+  right: -7px;
+  background: var(--color-imessage);
+  border-bottom-left-radius: 16px 14px;
+}
+.bubble.tail-out::after,
+.bubble.tail-in::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  width: 26px;
+  height: 17px;
+  background: var(--color-ios-bg);
+}
+.bubble.tail-out::after {
+  right: -26px;
+  border-bottom-left-radius: 10px;
+}
+.bubble.tail-in::before {
+  left: -7px;
+  background: var(--color-bubble-in);
+  border-bottom-right-radius: 16px 14px;
+}
+.bubble.tail-in::after {
+  left: -26px;
+  border-bottom-right-radius: 10px;
+}
+
+@keyframes typing {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+  30% { transform: translateY(-3px); opacity: 1; }
+}
+.typing-dot {
+  animation: typing 1.2s infinite ease-in-out;
+}
+.typing-dot:nth-child(2) { animation-delay: 0.15s; }
+.typing-dot:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes ring-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(52, 199, 89, 0.55); }
+  70% { box-shadow: 0 0 0 22px rgba(52, 199, 89, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(52, 199, 89, 0); }
+}
+.ring-pulse {
+  animation: ring-pulse 1.6s infinite;
+}
+
+@keyframes pop-in {
+  from { transform: translateY(6px) scale(0.98); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+.pop-in {
+  animation: pop-in 180ms ease-out both;
+}
+
+@keyframes slide-up {
+  from { transform: translateY(100%); }
+  to { transform: none; }
+}
+.slide-up {
+  animation: slide-up 260ms cubic-bezier(0.2, 0.9, 0.2, 1) both;
+}
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { scrollbar-width: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .typing-dot, .ring-pulse, .pop-in, .slide-up { animation: none !important; }
+}

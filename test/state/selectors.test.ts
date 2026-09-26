@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createInitialState } from "../../src/worker/state/initial";
-import { missingSlots, nextGoal, phaseOf, quickReplies, summaryForPrompt } from "../../src/worker/state/selectors";
+import { missingSlots, nextGoal, phaseOf, quickReplies, summaryForPrompt } from "../../src/shared/selectors";
 import type { SessionState } from "../../src/shared/types";
 import { NOW, filled, stateWith } from "./fixtures";
 

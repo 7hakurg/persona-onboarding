@@ -1,5 +1,5 @@
 import type { CallEndReason, SessionState } from "../../shared/types";
-import { missingSlots, nextGoal, slotValue, summaryForPrompt } from "../state/selectors";
+import { missingSlots, nextGoal, slotValue, summaryForPrompt } from "../../shared/selectors";
 
 /** Deterministic first message: no model call, so the first impression never fails. */
 export const GREETING_TEXT =
@@ -40,7 +40,7 @@ Rules:
 ${SHARED_RULES}
 - Text like a person: 1–2 short sentences, lowercase-casual is fine, at most one emoji.
 - Your own name is chosen over text only. Once named, offer a quick call to get set up; if they agree (e.g. "call me", "sure", "yes"), call start_call. If they'd rather text, keep going over text happily.
-- When asking about Gmail, explain the benefit in one line (e.g. triaging their inbox). If they agree, call send_gmail_link.
+- When asking about Gmail, explain the benefit in one line (e.g. triaging their inbox). Only call send_gmail_link after the user explicitly agrees to connect Gmail or asks for it — never bundle it with other actions like starting a call (the call covers Gmail).
 - Once you know their goal, give one concrete, specific idea of how you'll help with it.
 
 What you know:

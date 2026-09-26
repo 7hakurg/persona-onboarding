@@ -15,13 +15,13 @@ import { log } from "../log";
 import { createInitialState } from "../state/initial";
 import { mergeTurnResult } from "../state/merge";
 import { appendEvent, appendMessage, markNudge, setTurnPending } from "../state/reducers";
-import { isCallLive } from "../state/selectors";
+import { isCallLive } from "../../shared/selectors";
 import { CallController, type ScheduledCallback } from "../live/call-controller";
 import { createCallHost } from "./call-host";
 import { applyGmailCompletion } from "../gmail/apply";
 import type { GmailCompletion } from "../gmail/completion";
 import { composeInsight } from "../gmail/insight";
-import { slotValue } from "../state/selectors";
+import { slotValue } from "../../shared/selectors";
 import { TurnQueue } from "./turn-queue";
 
 const CHAT_WINDOW_KEY = "chat-window";

@@ -3,7 +3,7 @@ import { extractionInstructions, followupInstructions } from "../conductor/promp
 import { executeTool } from "../conductor/tools";
 import type { JsonSchemaObject, LlmClient } from "../llm/types";
 import { errorFields, log } from "../log";
-import { slotValue } from "../state/selectors";
+import { slotValue } from "../../shared/selectors";
 
 const EXTRACTION_SCHEMA: JsonSchemaObject = {
   type: "object",
