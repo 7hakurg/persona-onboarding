@@ -51,7 +51,7 @@ talking to an assistant, not filling a form.
 | N1 | Voice latency comparable to a phone call (speech-to-speech model, barge-in supported). |
 | N2 | Public URL on Cloudflare Workers. |
 | N3 | Abuse and spend protection: per-session and per-IP rate limits, a global daily voice-minute budget, max call duration, input size caps. |
-| N4 | No secrets in the client or repo. OpenAI key used client-side only as a short-lived ephemeral secret. |
+| N4 | No secrets in the client or repo. The OpenAI key never leaves the server: the DO creates the voice session from the browser's SDP offer. |
 | N5 | 80%+ unit test coverage on server logic; E2E coverage of critical flows with a fake LLM. |
 
 ## 3. Architecture
@@ -66,32 +66,55 @@ Cloudflare Worker (Hono router)
   └─ static assets (SPA)
 
 OnboardingAgent ── OpenAI Responses API (chat conductor, gpt-6-luna)
-                 ── OpenAI /v1/realtime/client_secrets (ephemeral key for the call)
+                 ── POST /v1/live/sessions (creates the GPT-Live call from the browser's SDP offer)
+                 ── wss://api.openai.com/v1/live/sessions/{id}/attach  (sideband, held by the DO)
                  ── Gmail API (one-shot inbox snapshot inside the OAuth callback)
 
-Browser ══ WebRTC ══ OpenAI Realtime (gpt-realtime-2.1)
-   voice tool calls arrive on the data channel → forwarded to OnboardingAgent via RPC
-   → validated + applied → result returned → sent back as function_call_output
+Browser ══ WebRTC (audio + "oai-events" data channel for captions) ══ GPT-Live (gpt-live-1)
+                                                                        │ Responses delegation
+                                                                        ▼
+                                                           backend gpt-6-luna + our function tools
+   function calls surface on the sideband → OnboardingAgent validates + applies →
+   response.item.create(function_call_output) + response.create
 ```
+
+### Voice model: GPT-Live
+
+`gpt-live-1` (released 2026-09-08) is OpenAI's recommended starting point for new voice
+apps. It is full duplex (listens while speaking), $0.05/min billed per second, and
+delegates reasoning and tool use to a backend model. We use **Responses delegation** with
+`gpt-6-luna` as the backend (the model the docs recommend starting with), so the voice
+call and the text chat share the same backend model, the same tool registry, and the same
+prompt builder. GPT-Live's own instructions stay short: conversation style, the persona,
+and when to delegate.
 
 ### Why this shape
 
-- **One authority.** Both channels (chat, voice) mutate state only through the Durable
-  Object. The voice model proposes; the server validates and decides. Tool results carry
-  the updated "what's still missing" so the voice model stays in sync.
-- **Browser-side WebRTC** gives the best voice quality and barge-in with the least moving
-  parts. The alternative (server sideband WebSocket) was rejected for this phase due to
-  complexity; it is used in the Phase 2 real-phone adapter where it is required.
+- **One authority.** Both channels mutate state only through the Durable Object. The
+  models propose; the server validates and decides. Tool results carry the updated
+  "what's still missing" so the call stays in sync.
+- **Server-created, server-controlled call.** The browser sends only its SDP offer; the
+  DO creates the session with the project key (never exposed), enforces limits before
+  any spend, then attaches a sideband WebSocket. Tools execute server-side and cannot be
+  spoofed from the browser. `session.closed.reason` (`remote_hangup`, `connection_lost`,
+  `expired`, `content`, `close_requested`) gives authoritative hangup detection even if
+  the tab vanishes.
+- **Live context injection.** When state changes outside the call (e.g. Gmail finishes
+  connecting in the popup), the DO sends `session.thinking.append` so the assistant can
+  react naturally mid-conversation.
+- **Continuity.** The call is seeded with recent chat history via `session.input`
+  (≤128 messages / 8,192 tokens), so it never re-asks what the user already typed.
 - **Agents SDK** provides DO-backed state that syncs to every connected tab, typed
-  callable RPC, WebSocket hibernation, and scheduling (alarms) — the pieces we would
-  otherwise hand-roll.
+  callable RPC, WebSocket hibernation, and scheduling (alarms).
 
 ### Channel adapter boundary
 
 The conductor never talks to a transport directly. A `CallChannel` interface
 (`start(session) → handle`, events: `connected`, `toolCall`, `transcript`, `ended(reason)`)
-has one Phase 1 implementation (`BrowserRealtimeChannel`) and one Phase 2 implementation
-(`TwilioSipChannel`). Chat is its own channel with the same tool set.
+has one Phase 1 implementation (`BrowserLiveChannel`: WebRTC media + DO sideband) and one
+Phase 2 implementation (`SipLiveChannel`: GPT-Live SIP + the same DO sideband). Because
+the sideband is shared, Phase 2 is mostly telephony wiring. Chat is its own channel with
+the same tool set.
 
 ## 4. Session State
 
@@ -115,12 +138,13 @@ type GmailState =
 
 type CallEndReason =
   | "completed" | "user_hangup" | "declined" | "no_answer" | "mic_denied"
-  | "connection_failed" | "dropped" | "max_duration" | "page_closed" | "budget_exhausted";
+  | "connection_failed" | "dropped" | "max_duration" | "page_closed" | "moderated"
+  | "budget_exhausted";
 
 type CallState =
   | { status: "idle" }
   | { status: "ringing"; callId: string; since: number }
-  | { status: "active"; callId: string; since: number; lastHeartbeat: number }
+  | { status: "active"; callId: string; liveSessionId: string; since: number; usedSeconds: number }
   | { status: "ended"; callId: string; reason: CallEndReason; at: number };
 
 type Phase = "intro" | "naming" | "calling" | "collecting_text" | "wrapup" | "graduated";
@@ -186,16 +210,32 @@ One policy drives both channels.
 
 1. `start_call` (from conductor or a "Call me" chip) → checks budget and per-session call
    limit (5) → state `ringing` → simulator shows incoming call (30s timeout → `no_answer`).
-2. **Accept** → client calls `beginCall()` RPC → DO mints an ephemeral client secret with
-   session config: instructions built from current state, voice tools, `gpt-4o-mini-transcribe`
-   input transcription, server VAD, voice `marin`. → client opens WebRTC with the secret.
-3. **During the call:** the client forwards `function_call` events to `voiceToolCall()` and
-   returns the result; final transcripts (both sides) go to `voiceTranscript()` and appear
-   as live captions; a heartbeat every 5s goes to `callHeartbeat()`.
-4. **Ending:** any end path calls `endCall(reason)`. Client-detectable reasons: decline,
-   hangup button, mic denied, WebRTC `failed`, `pagehide` (sent via `navigator.sendBeacon`
-   to `/api/call-ended`). Server-detected: heartbeat stale >20s → `dropped`; duration >5 min
-   → `max_duration` (client is told to hang up; secret expiry is the hard stop).
+2. **Accept** → the browser gets mic permission, builds the peer connection and the
+   `oai-events` data channel, gathers ICE, and sends the SDP offer to `beginCall(sdp)` RPC.
+   The DO re-checks limits, then calls `POST /v1/live/sessions` with: `model: gpt-live-1`,
+   short live instructions (persona, style, when to delegate), `input` seeded from recent
+   chat, `audio.output.voice` (default `marin`, configurable), and `delegation: { type:
+   "responses", responses: { model: gpt-6-luna, instructions: <voice conductor prompt>,
+   tools: <voice tool set>, tool_choice: "auto", reasoning: { effort: "low" } } }`. It
+   returns the SDP answer to the browser and stores `session.id`.
+3. **Sideband:** the DO opens `wss://api.openai.com/v1/live/sessions/{id}/attach` (outbound
+   WebSocket via `fetch` upgrade, `Authorization: Bearer`). On `session.started` it sends
+   the greeting via `session.instructions.append`. It collects transcript deltas
+   (`session.input_transcript.delta` / `session.output_transcript.delta`), executes
+   function calls read from nested `response.output_item.done` inside `response.event`,
+   replies with `response.item.create` (`function_call_output`) and then `response.create`,
+   and pushes external state changes with `session.thinking.append`. The browser only
+   renders captions from its data channel; it never executes tools. Sideband attach is
+   retried 3× with backoff; if it still fails, the DO closes the session (`connection_failed`)
+   and the conversation continues in text.
+4. **Ending:** client-detectable: decline, hangup button (`session.close` over the data
+   channel, wait for `session.closed`, 15s timeout), mic denied, WebRTC `failed`,
+   `pagehide` (`navigator.sendBeacon` to `/api/call-ended`). Server-authoritative: the
+   sideband's `session.closed.reason` maps `remote_hangup` → `user_hangup`,
+   `connection_lost` → `dropped`, `expired` → `max_duration`, `content` → `moderated`,
+   `close_requested` → whichever side requested it. A DO alarm enforces the 5-minute cap
+   by sending `session.close`. Sideband socket loss without `session.closed` → `dropped`.
+   `session.usage.updated` seconds feed the voice-minute budget.
 5. **After the call:** a structured-output **extraction pass** runs over the call
    transcript to capture any slot the user stated but the model didn't save (F8). Then the
    conductor posts a follow-up based on reason and what's missing, e.g. *"Looks like we
@@ -256,15 +296,14 @@ A second failed call attempt stops offering calls proactively (user can still as
 - Secrets as Worker secrets: `OPENAI_API_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
   `OAUTH_STATE_SECRET`. Validated at startup of each request path; missing Google config
   disables the Gmail card with a clear message instead of failing.
-- CSP restricting scripts to self; connect-src allows `api.openai.com`.
+- CSP restricting scripts and connections to self (WebRTC media is negotiated through our server; no direct browser calls to OpenAI).
 - Server logs: structured JSON with session id and event type; never message content
   or tokens.
 
 ## 10. Configuration
 
 All tunables in one `config.ts` (model names, voice, limits, timeouts, budget), overridable
-by Worker vars. Models: chat `gpt-6-luna` (reasoning effort `low`; benchmarked 2026-09-26: 0.9–1.7s, correct multi-slot tool calls, no hallucinated slots), realtime `gpt-realtime-2.1`, transcription
-`gpt-4o-mini-transcribe`.
+by Worker vars. Models: chat `gpt-6-luna` (reasoning effort `low`; benchmarked 2026-09-26: 0.9–1.7s, correct multi-slot tool calls, no hallucinated slots), voice `gpt-live-1` (voice `marin`) with Responses delegation to `gpt-6-luna`.
 
 ## 11. Testing
 
@@ -272,9 +311,9 @@ by Worker vars. Models: chat `gpt-6-luna` (reasoning effort `low`; benchmarked 2
   next-step, validators, tool permission matrix, graduation rules, OAuth state signing
   and verification, rate limiter, budget, prompt assembly snapshots.
 - **Integration:** `OnboardingAgent` with a scripted `LlmClient` fake — chat turns, tool
-  loops, coalescing, call lifecycle including heartbeat-timeout drop, extraction pass,
+  loops, coalescing, call lifecycle driven by a fake sideband (every `session.closed` reason, sideband loss, attach failure), extraction pass,
   resume after reconnect.
-- **E2E (Playwright, fake LLM + fake realtime channel):** happy path; decline call → text
+- **E2E (Playwright, fake LLM + fake live channel):** happy path; decline call → text
   completion; hangup mid-call → recovery; early graduation with gmail nudge; refresh
   mid-flow resumes; multi-slot utterance.
 - **Chaos script:** a list of adversarial user scripts (joke names, refusals, injection
@@ -287,8 +326,8 @@ by Worker vars. Models: chat `gpt-6-luna` (reasoning effort `low`; benchmarked 2
 1. **Phase 1 — core demo (this plan):** everything above, deployed to
    `*.workers.dev`.
 2. **Phase 2 — real phone add-on:** "Call my real phone instead" option. Twilio number →
-   OpenAI Realtime SIP; `realtime.call.incoming` webhook → Worker accepts with
-   state-derived instructions; the DO holds a sideband WebSocket to execute tools.
+   GPT-Live SIP; the incoming-call webhook → Worker accepts with state-derived
+   configuration; the DO attaches the same sideband it uses in Phase 1 to execute tools.
    Requires a Twilio account; trial accounts can only call verified numbers. Built behind
    the same `CallChannel` interface; not started until Phase 1 is live and stable.
 
@@ -301,3 +340,5 @@ by Worker vars. Models: chat `gpt-6-luna` (reasoning effort `low`; benchmarked 2
 | Spend from stress testing | Budget DO, per-session/IP limits, max call length, OpenAI project budget limit. |
 | Browser mic / autoplay restrictions | Accepting the call is a user gesture that unlocks audio; mic-denied path falls back to text. |
 | OpenAI outage | Call start fails fast → `connection_failed` → text path. |
+| GPT-Live is new (2026-09-08); APIs may shift | All Live wire formats isolated in one module (`live/`) with zod-validated events; unknown events logged and ignored. |
+| DO restarts mid-call and loses the sideband | Live session id persisted; on wake the DO re-attaches; if that fails the call is ended as `dropped` and recovery runs. |
