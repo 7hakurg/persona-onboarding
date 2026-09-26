@@ -85,7 +85,7 @@ describe("quickReplies", () => {
   });
   it("offers gmail and graduation near the end", () => {
     const named = slots({ agentName: filled("J"), userName: filled("Sam"), helpGoal: filled("email") });
-    expect(quickReplies(stateWith({ callAttempts: 1, slots: named }))).toEqual(["Connect Gmail", "Skip for now"]);
+    expect(quickReplies(stateWith({ callAttempts: 1, slots: named }))).toEqual(["Connect Gmail", "Skip for now", "Skip to the app"]);
     expect(quickReplies(stateWith({ callAttempts: 1, slots: named, gmail: connected }))).toEqual(["Take me to the app"]);
   });
 });
@@ -98,5 +98,15 @@ describe("summaryForPrompt", () => {
     expect(text).toContain("Help goal: email triage");
     expect(text).toContain("User name: unknown");
     expect(text).toContain("Gmail: not connected");
+  });
+});
+
+describe("declined gmail", () => {
+  const named = () => slots({ agentName: filled("J"), userName: filled("Sam"), helpGoal: filled("email") });
+  it("counts a decline as settled so onboarding can wrap up", () => {
+    expect(nextGoal(stateWith({ callAttempts: 1, slots: named(), gmail: { status: "declined", at: NOW } }))).toBe("wrap_up");
+  });
+  it("offers an explicit way out while asking about gmail", () => {
+    expect(quickReplies(stateWith({ callAttempts: 1, slots: named() }))).toEqual(["Connect Gmail", "Skip for now", "Skip to the app"]);
   });
 });

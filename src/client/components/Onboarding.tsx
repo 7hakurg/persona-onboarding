@@ -35,6 +35,7 @@ export function Onboarding({ gmailEnabled }: { gmailEnabled: boolean }) {
   const [view, setView] = useState<"chat" | "home">("chat");
   const [minimized, setMinimized] = useState(false);
   const [caption, setCaption] = useState<Caption>(null);
+  const [accepting, setAccepting] = useState(false);
   const callRef = useRef<LiveCall | null>(null);
   const graduated = state?.graduatedAt != null;
   const callStatus = state?.call.status ?? "idle";
@@ -42,6 +43,10 @@ export function Onboarding({ gmailEnabled }: { gmailEnabled: boolean }) {
   useEffect(() => {
     if (graduated) setView("home");
   }, [graduated]);
+
+  useEffect(() => {
+    if (callStatus !== "ringing") setAccepting(false);
+  }, [callStatus]);
 
   // Server is the authority: if it ended the call, tear down local media.
   useEffect(() => {
@@ -81,6 +86,9 @@ export function Onboarding({ gmailEnabled }: { gmailEnabled: boolean }) {
   };
 
   const accept = () => {
+    // A second tap before the server leaves "ringing" must not start a second call.
+    if (callRef.current) return;
+    setAccepting(true);
     const call = new LiveCall({
       exchange: (sdp) => session.acceptCall(sdp),
       onFailure: (reason: ClientEndReason) => void session.endCall(reason),
@@ -111,7 +119,7 @@ export function Onboarding({ gmailEnabled }: { gmailEnabled: boolean }) {
 
   const name = agentDisplayName(state);
   const since = state?.call.status === "active" ? state.call.since : null;
-  const inCall = callStatus === "connecting" || callStatus === "active";
+  const inCall = callStatus === "connecting" || callStatus === "active" || (callStatus === "ringing" && accepting);
 
   return (
     <main className="flex min-h-dvh items-center justify-center gap-8 sm:p-6">
@@ -133,7 +141,7 @@ export function Onboarding({ gmailEnabled }: { gmailEnabled: boolean }) {
             {...(graduated ? { onBack: () => setView("home") } : {})}
           />
         )}
-        {callStatus === "ringing" && <IncomingCall name={name} onAccept={accept} onDecline={() => void session.declineCall()} />}
+        {callStatus === "ringing" && !accepting && <IncomingCall name={name} onAccept={accept} onDecline={() => void session.declineCall()} />}
         {inCall && !minimized && (
           <ActiveCall
             name={name}

@@ -42,7 +42,7 @@ describe("OnboardingAgent call path", () => {
     const origin = "https://persona.test";
     const res = await exports.default.fetch(`${origin}/api/session`, { method: "POST", headers: { Origin: origin } });
     const cookie = (res.headers.get("set-cookie") ?? "").split(";")[0]!;
-    const sid = cookie.split("=")[1]!;
+    const sid = cookie.split("=")[1]!.split(".")[0]!;
     const { agentNamed } = await import("./helpers");
     const agent = await agentNamed(sid);
     await agent.ensureGreeted();

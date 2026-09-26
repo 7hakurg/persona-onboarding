@@ -31,7 +31,7 @@ export function nextGoal(state: SessionState): Goal {
   if (userName.status === "pending_confirmation") return "confirm_user_name";
   if (userName.status === "empty") return "user_name";
   if (helpGoal.status === "empty" || helpGoal.status === "pending_confirmation") return "help_goal";
-  if (!isGmailDone(state)) return "gmail";
+  if (!isGmailDone(state) && state.gmail.status !== "declined") return "gmail";
   return "wrap_up";
 }
 
@@ -58,7 +58,7 @@ export function quickReplies(state: SessionState): string[] {
     case "offer_call":
       return ["Call me", "Let's just text", "Skip to the app"];
     case "gmail":
-      return ["Connect Gmail", "Skip for now"];
+      return ["Connect Gmail", "Skip for now", "Skip to the app"];
     case "wrap_up":
       return ["Take me to the app"];
     default:

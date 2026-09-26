@@ -22,6 +22,15 @@ describe("ringing", () => {
     expect(host.state.callAttempts).toBe(1);
     expect(host.scheduled).toEqual([{ delayMs: CONFIG.limits.ringTimeoutMs, callback: "onRingTimeout", payload: { callId: callId(host) } }]);
   });
+  it("rings once when asked twice concurrently (double tap / chip racing the button)", async () => {
+    const host = new FakeHost();
+    const ctl = new CallController(host);
+    const results = await Promise.all([ctl.ring(), ctl.ring()]);
+    expect(results).toContainEqual({ ok: true });
+    expect(results).toContainEqual({ ok: false, error: "call_in_progress" });
+    expect(host.state.callAttempts).toBe(1);
+    expect(host.scheduled.filter((s) => s.callback === "onRingTimeout")).toHaveLength(1);
+  });
   it("does not ring when the voice budget is exhausted", async () => {
     const host = new FakeHost();
     host.capacity = false;
@@ -206,6 +215,20 @@ describe("ending", () => {
     const { host } = await activeCall();
     const fresh = new (await import("../../src/worker/live/call-controller")).CallController(host);
     await fresh.recoverAfterRestart();
+    expect(host.state.call).toMatchObject({ status: "ended", reason: "dropped" });
+  });
+});
+
+describe("restart recovery", () => {
+  it("returns immediately even when the follow-up model call hangs (runs inside blockConcurrencyWhile)", async () => {
+    const { host } = await activeCall();
+    host.llm = () => ({ respond: () => new Promise(() => {}) });
+    const fresh = new CallController(host);
+    const outcome = await Promise.race([
+      fresh.recoverAfterRestart().then(() => "returned"),
+      new Promise((r) => setTimeout(() => r("blocked"), 200)),
+    ]);
+    expect(outcome).toBe("returned");
     expect(host.state.call).toMatchObject({ status: "ended", reason: "dropped" });
   });
 });

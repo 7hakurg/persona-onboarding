@@ -19,6 +19,11 @@ export class TurnQueue {
     if (!this.running) this.running = this.drain();
   }
 
+  /** True when another run has been requested and will start after the current one. */
+  get hasQueuedRun(): boolean {
+    return this.dirty;
+  }
+
   get count(): number {
     return this.runs;
   }

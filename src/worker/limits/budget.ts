@@ -16,6 +16,15 @@ export class BudgetDO extends DurableObject<Env> {
     return (await this.usedSecondsToday()) < CONFIG.limits.dailyVoiceMinutes * 60;
   }
 
+  /** Counts one chat turn against the global daily cap; false once the cap is reached. */
+  async consumeChatTurn(dailyCap: number = CONFIG.limits.dailyChatTurns): Promise<boolean> {
+    const key = `chat-turns:${new Date().toISOString().slice(0, 10)}`;
+    const used = (await this.ctx.storage.get<number>(key)) ?? 0;
+    if (used >= dailyCap) return false;
+    await this.ctx.storage.put(key, used + 1);
+    return true;
+  }
+
   async record(seconds: number): Promise<void> {
     if (!Number.isFinite(seconds) || seconds <= 0) return;
     const key = this.key();
@@ -25,3 +34,7 @@ export class BudgetDO extends DurableObject<Env> {
 }
 
 export const GLOBAL_BUDGET_NAME = "global";
+
+export function globalBudget(env: Env): DurableObjectStub<BudgetDO> {
+  return env.BUDGET.get(env.BUDGET.idFromName(GLOBAL_BUDGET_NAME)) as unknown as DurableObjectStub<BudgetDO>;
+}

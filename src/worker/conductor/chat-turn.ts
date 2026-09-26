@@ -4,6 +4,7 @@ import type { InputItem, LlmClient } from "../llm/types";
 import { errorFields, log } from "../log";
 import { appendMessage } from "../state/reducers";
 import { FALLBACK_REPLY, chatInstructions, defaultLine } from "./prompts";
+import type { RecordedInvocation, TurnRecord } from "./commit";
 import { executeTool, toolDefinitions, type Effect } from "./tools";
 
 export interface TurnDeps {
@@ -15,6 +16,8 @@ export interface TurnDeps {
 export interface TurnOutcome {
   state: SessionState;
   effects: Effect[];
+  /** Replayable record of the turn, for committing against newer state. */
+  record: TurnRecord;
 }
 
 const CARD_CONTEXT: Record<string, (m: ChatMessage) => string> = {
@@ -39,16 +42,20 @@ export function contextItems(state: SessionState): InputItem[] {
     .slice(-CONFIG.history.chatContextMessages);
 }
 
-function reply(state: SessionState, text: string, deps: TurnDeps): SessionState {
-  const clean = text.trim() || defaultLine(state);
-  return appendMessage(state, { id: deps.newId(), at: deps.now(), role: "assistant", kind: "text", text: clean });
+function replyMessage(state: SessionState, text: string, deps: TurnDeps): ChatMessage {
+  return { id: deps.newId(), at: deps.now(), role: "assistant", kind: "text", text: text.trim() || defaultLine(state) };
 }
 
 export async function runChatTurn(initial: SessionState, deps: TurnDeps): Promise<TurnOutcome> {
   let state = initial;
   const effects: Effect[] = [];
+  const invocations: RecordedInvocation[] = [];
   const input = contextItems(state);
   const max = CONFIG.limits.toolLoopMaxIterations;
+  const done = (text: string): TurnOutcome => {
+    const message = replyMessage(state, text, deps);
+    return { state: appendMessage(state, message), effects, record: { invocations, replies: [message] } };
+  };
   try {
     for (let iteration = 0; iteration <= max; iteration++) {
       const allowTools = iteration < max;
@@ -57,18 +64,19 @@ export async function runChatTurn(initial: SessionState, deps: TurnDeps): Promis
         input,
         ...(allowTools ? { tools: toolDefinitions("text") } : {}),
       });
-      if (!allowTools || res.calls.length === 0) return { state: reply(state, res.outputText, deps), effects };
+      if (!allowTools || res.calls.length === 0) return done(res.outputText);
       for (const call of res.calls) {
         const out = executeTool(state, { name: call.name, argsJson: call.argsJson, channel: "text", now: deps.now() });
         state = out.state;
         effects.push(...out.effects);
+        invocations.push({ name: call.name, argsJson: call.argsJson });
         input.push({ type: "function_call", call_id: call.callId, name: call.name, arguments: call.argsJson });
         input.push({ type: "function_call_output", call_id: call.callId, output: JSON.stringify(out.result) });
       }
     }
   } catch (err) {
     log("error", "chat_turn_failed", errorFields(err));
-    return { state: reply(state, FALLBACK_REPLY, deps), effects };
+    return done(FALLBACK_REPLY);
   }
-  return { state: reply(state, "", deps), effects };
+  return done("");
 }

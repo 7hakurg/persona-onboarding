@@ -154,3 +154,15 @@ describe("graduate", () => {
     expect(out.effects).toEqual([{ type: "graduated" }]);
   });
 });
+
+describe("skip_gmail", () => {
+  it("records that the user skipped gmail", () => {
+    const out = run(createInitialState(NOW), "skip_gmail", {});
+    expect(out.state.gmail).toEqual({ status: "declined", at: NOW });
+    expect(out.result.ok).toBe(true);
+  });
+  it("does nothing when gmail is already connected", () => {
+    const s = stateWith({ gmail: { status: "connected_limited", email: "a@b.co" } });
+    expect(run(s, "skip_gmail", {}).state.gmail).toEqual(s.gmail);
+  });
+});

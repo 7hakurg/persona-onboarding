@@ -9,7 +9,7 @@ const ORIGIN = "https://persona.test";
 async function session() {
   const res = await exports.default.fetch(`${ORIGIN}/api/session`, { method: "POST", headers: { Origin: ORIGIN } });
   const cookie = (res.headers.get("set-cookie") ?? "").split(";")[0]!;
-  const agent = await agentNamed(cookie.split("=")[1]!);
+  const agent = await agentNamed(cookie.split("=")[1]!.split(".")[0]!);
   await agent.ensureGreeted();
   return { cookie, agent };
 }
@@ -47,14 +47,14 @@ describe("gmail routes", () => {
     const { cookie, agent } = await session();
     const state = await startFlow(cookie);
     stubGoogle();
-    const cb = await exports.default.fetch(`${ORIGIN}/auth/google/callback?code=abc&state=${encodeURIComponent(state)}`);
+    const cb = await exports.default.fetch(`${ORIGIN}/auth/google/callback?code=abc&state=${encodeURIComponent(state)}`, { headers: { Cookie: cookie } });
     expect(cb.status).toBe(200);
     expect(await cb.text()).toContain("persona-gmail");
     const s = await agent.snapshot();
     expect(s.gmail).toMatchObject({ status: "connected", email: "sam@example.com", snapshot: { unreadCount: 12 } });
     expect(JSON.stringify(s)).not.toContain("ya29");
     expect(s.messages.some((m) => m.data?.card === "insight")).toBe(true);
-    const replay = await exports.default.fetch(`${ORIGIN}/auth/google/callback?code=abc&state=${encodeURIComponent(state)}`);
+    const replay = await exports.default.fetch(`${ORIGIN}/auth/google/callback?code=abc&state=${encodeURIComponent(state)}`, { headers: { Cookie: cookie } });
     expect(replay.status).toBe(400);
   });
 
@@ -62,14 +62,14 @@ describe("gmail routes", () => {
     const { cookie, agent } = await session();
     const state = await startFlow(cookie);
     stubGoogle("openid email");
-    await exports.default.fetch(`${ORIGIN}/auth/google/callback?code=abc&state=${encodeURIComponent(state)}`);
+    await exports.default.fetch(`${ORIGIN}/auth/google/callback?code=abc&state=${encodeURIComponent(state)}`, { headers: { Cookie: cookie } });
     expect((await agent.snapshot()).gmail).toEqual({ status: "connected_limited", email: "sam@example.com" });
   });
 
   it("records a declined consent", async () => {
     const { cookie, agent } = await session();
     const state = await startFlow(cookie);
-    const cb = await exports.default.fetch(`${ORIGIN}/auth/google/callback?error=access_denied&state=${encodeURIComponent(state)}`);
+    const cb = await exports.default.fetch(`${ORIGIN}/auth/google/callback?error=access_denied&state=${encodeURIComponent(state)}`, { headers: { Cookie: cookie } });
     expect(cb.status).toBe(200);
     expect((await agent.snapshot()).gmail.status).toBe("declined");
   });
@@ -88,7 +88,25 @@ describe("gmail routes", () => {
     await agent.whenIdle();
     expect((await agent.snapshot()).graduatedAt).not.toBeNull();
     stubGoogle();
-    await exports.default.fetch(`${ORIGIN}/auth/google/callback?code=abc&state=${encodeURIComponent(state)}`);
+    await exports.default.fetch(`${ORIGIN}/auth/google/callback?code=abc&state=${encodeURIComponent(state)}`, { headers: { Cookie: cookie } });
     expect((await agent.snapshot()).gmail.status).toBe("connected");
+  });
+});
+
+describe("gmail callback session binding", () => {
+  it("refuses to complete a flow started by a different session (login CSRF / data capture)", async () => {
+    const attacker = await session();
+    const victim = await session();
+    const state = await startFlow(attacker.cookie);
+    stubGoogle();
+    const res = await exports.default.fetch(`${ORIGIN}/auth/google/callback?code=victim-code&state=${encodeURIComponent(state)}`, { headers: { Cookie: victim.cookie } });
+    expect(res.status).toBe(403);
+    expect((await attacker.agent.snapshot()).gmail.status).not.toBe("connected");
+  });
+  it("refuses a callback without a session cookie", async () => {
+    const { cookie } = await session();
+    const state = await startFlow(cookie);
+    const res = await exports.default.fetch(`${ORIGIN}/auth/google/callback?code=x&state=${encodeURIComponent(state)}`);
+    expect(res.status).toBe(403);
   });
 });

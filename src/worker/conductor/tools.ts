@@ -143,6 +143,10 @@ function dispatch(name: ToolName, args: never, state: SessionState, inv: ToolInv
       return setHelpGoal(state, args, inv);
     case "send_gmail_link":
       return sendGmailLink(state, inv);
+    case "skip_gmail":
+      return isGmailDone(state)
+        ? { state, ok: true, saved: { gmail: "already connected" } }
+        : { state: setGmail(state, { status: "declined", at: inv.now }), ok: true, saved: { gmail: "skipped for now" } };
     case "check_gmail_status":
       return { state, ok: true, saved: { gmail: state.gmail.status } };
     case "start_call":

@@ -19,6 +19,7 @@ export const CONFIG = {
     maxCallMs: 5 * 60_000,
     ringTimeoutMs: 30_000,
     dailyVoiceMinutes: 300,
+    dailyChatTurns: 5_000,
     toolLoopMaxIterations: 4,
     maxSlotAttempts: 2,
   },

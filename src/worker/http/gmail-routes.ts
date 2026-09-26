@@ -65,7 +65,7 @@ const PAGE_FOR: Record<GmailCompletion["outcome"], PageStatus> = { connected: "c
 
 export function registerGmailRoutes(app: Hono<{ Bindings: Env }>): void {
   app.get("/auth/google/start", async (c) => {
-    const sid = readSessionId(c.req.raw);
+    const sid = await readSessionId(c.req.raw, requireSecret(c.env, "OAUTH_STATE_SECRET"));
     if (!sid) return resultPage("error", 401);
     const cfg = googleConfig(c.env);
     if (!cfg) return resultPage("unavailable");
@@ -80,6 +80,9 @@ export function registerGmailRoutes(app: Hono<{ Bindings: Env }>): void {
     const url = new URL(c.req.url);
     const payload = await verifyState(requireSecret(c.env, "OAUTH_STATE_SECRET"), url.searchParams.get("state") ?? "", Date.now());
     if (!payload) return resultPage("error", 400);
+    // The browser finishing the flow must own the session that started it; otherwise a
+    // consent link minted by one session could deliver someone else's inbox to it.
+    if ((await readSessionId(c.req.raw, requireSecret(c.env, "OAUTH_STATE_SECRET"))) !== payload.sid) return resultPage("error", 403);
     const agent = await agentFor(c.env, payload.sid);
     if (!(await agent.hasPendingGmailNonce(payload.nonce))) return resultPage("error", 400);
     const result = await completion(c.env, url, payload.nonce);

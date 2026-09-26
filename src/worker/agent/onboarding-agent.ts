@@ -3,17 +3,18 @@ import type { CallEndReason, CardData, ChatMessage, SessionState } from "../../s
 import type { AcceptCallResult, RpcResult } from "../../shared/rpc";
 import { CONFIG } from "../config";
 import { runChatTurn } from "../conductor/chat-turn";
-import { GREETING_TEXT, idleNudge } from "../conductor/prompts";
+import { commitTurn } from "../conductor/commit";
+import { CHAT_BUSY_REPLY, FALLBACK_REPLY, GREETING_TEXT, idleNudge } from "../conductor/prompts";
 import type { Effect } from "../conductor/tools";
 import type { Env } from "../env";
 import { requireSecret } from "../env";
 import { createFakeLlm } from "../llm/fake-llm";
 import { createOpenAiClient } from "../llm/llm-client";
 import type { LlmClient } from "../llm/types";
+import { globalBudget } from "../limits/budget";
 import { slidingWindow } from "../limits/rate-window";
-import { log } from "../log";
+import { errorFields, log } from "../log";
 import { createInitialState } from "../state/initial";
-import { mergeTurnResult } from "../state/merge";
 import { appendEvent, appendMessage, markNudge, setTurnPending } from "../state/reducers";
 import { isCallLive } from "../../shared/selectors";
 import { CallController, type ScheduledCallback } from "../live/call-controller";
@@ -44,6 +45,13 @@ export class OnboardingAgent extends Agent<Env, SessionState> {
 
   override async onStart(): Promise<void> {
     await this.calls.recoverAfterRestart();
+    // The turn queue lives in memory: a restart mid-turn would otherwise leave the
+    // typing indicator on and the user's last message unanswered.
+    const s = this.state;
+    if (s.turnPending || s.messages.at(-1)?.role === "user") {
+      this.update((st) => setTurnPending(st, true));
+      this.turns.request();
+    }
   }
 
   override async onConnect(): Promise<void> {
@@ -197,10 +205,22 @@ export class OnboardingAgent extends Agent<Env, SessionState> {
   }
 
   private async runTurn(): Promise<void> {
-    const before = this.state;
-    const out = await runChatTurn(before, { llm: this.llm(), now: () => Date.now(), newId: () => crypto.randomUUID() });
-    this.setState(setTurnPending(mergeTurnResult(this.state, before, out.state), false));
-    for (const effect of out.effects) await this.applyEffect(effect);
+    this.update((s) => setTurnPending(s, true));
+    try {
+      if (!(await globalBudget(this.env).consumeChatTurn())) {
+        this.say(CHAT_BUSY_REPLY);
+        return;
+      }
+      const out = await runChatTurn(this.state, { llm: this.llm(), now: () => Date.now(), newId: () => crypto.randomUUID() });
+      const committed = commitTurn(this.state, out.record, Date.now());
+      this.setState(committed.state);
+      for (const effect of committed.effects) await this.applyEffect(effect);
+    } catch (err) {
+      log("error", "turn_failed", errorFields(err));
+      this.say(FALLBACK_REPLY);
+    } finally {
+      if (!this.turns.hasQueuedRun) this.update((s) => setTurnPending(s, false));
+    }
     await this.scheduleIdleCheck();
   }
 

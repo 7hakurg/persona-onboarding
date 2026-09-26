@@ -40,6 +40,7 @@ function quickReplyCall(text: string): FunctionCall | null {
   if (/^(call me( back)?|actually, call me|yes,? call me)$/.test(t)) return call("start_call", {});
   if (/(skip to the app|take me to the app|skip onboarding)/.test(t)) return call("graduate", {});
   if (/^connect gmail$/.test(t)) return call("send_gmail_link", {});
+  if (/^(skip for now|no gmail|not now)$/.test(t)) return call("skip_gmail", {});
   return null;
 }
 

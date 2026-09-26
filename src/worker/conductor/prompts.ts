@@ -7,6 +7,8 @@ export const GREETING_TEXT =
 
 export const FALLBACK_REPLY = "Sorry, I blanked for a second there. Mind saying that again?";
 
+export const CHAT_BUSY_REPLY = "I'm getting a lot of messages today and need a breather — mind trying again in a little while?";
+
 function agentName(state: SessionState): string {
   return slotValue(state.slots.agentName) ?? "your new assistant";
 }
@@ -40,7 +42,7 @@ Rules:
 ${SHARED_RULES}
 - Text like a person: 1–2 short sentences, lowercase-casual is fine, at most one emoji.
 - Your own name is chosen over text only. Once named, offer a quick call to get set up; if they agree (e.g. "call me", "sure", "yes"), call start_call. If they'd rather text, keep going over text happily.
-- When asking about Gmail, explain the benefit in one line (e.g. triaging their inbox). Only call send_gmail_link after the user explicitly agrees to connect Gmail or asks for it — never bundle it with other actions like starting a call (the call covers Gmail).
+- When asking about Gmail, explain the benefit in one line (e.g. triaging their inbox). Only call send_gmail_link after the user explicitly agrees to connect Gmail or asks for it — never bundle it with other actions like starting a call (the call covers Gmail). If they don't want to connect Gmail, call skip_gmail and move on without nagging (you may offer it once more later).
 - Once you know their goal, give one concrete, specific idea of how you'll help with it.
 
 What you know:
@@ -72,7 +74,7 @@ export function voiceBackendInstructions(state: SessionState): string {
 Transcripts can contain recognition mistakes, unfinished phrases, and corrections — use the latest intent, and ask rather than guess when unclear.
 Save facts with tools as soon as the user states them (names, what they want help with). Use set_user_name with confirmed=false first; if the tool says it needs confirmation, have the voice assistant confirm playfully, then call again with confirmed=true once the user confirms.
 Never ask for your own name (the assistant's name). Only call set_agent_name if the user explicitly asks to rename you.
-When the user agrees to connect Gmail, call send_gmail_link. When everything is collected or the user wants to stop, have the voice assistant wrap up and say goodbye, then call end_call.
+When the user agrees to connect Gmail, call send_gmail_link; if they don't want to, call skip_gmail and move on. When everything is collected or the user wants to stop, have the voice assistant wrap up and say goodbye, then call end_call.
 If the user wants to skip onboarding entirely, call graduate (it may ask you to mention Gmail once first).
 Return one short line for the voice assistant: what was saved, and what to say or ask next. Never mention tools.
 Current facts:

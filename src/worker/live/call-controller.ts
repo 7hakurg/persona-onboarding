@@ -54,6 +54,8 @@ function currentCallId(state: SessionState): string | null {
 
 export class CallController {
   private runtime: Runtime | null = null;
+  /** Set synchronously so a second ring() arriving during the budget RPC is refused. */
+  private ringInFlight = false;
 
   constructor(private readonly host: CallHost) {}
 
@@ -61,13 +63,23 @@ export class CallController {
 
   async ring(): Promise<RpcResult> {
     const state = this.host.getState();
-    if (isCallLive(state)) return { ok: false, error: "call_in_progress" };
+    if (isCallLive(state) || this.ringInFlight) return { ok: false, error: "call_in_progress" };
     if (state.callAttempts >= CONFIG.limits.callsPerSession) return { ok: false, error: "unavailable" };
+    this.ringInFlight = true;
+    try {
+      return await this.startRinging();
+    } finally {
+      this.ringInFlight = false;
+    }
+  }
+
+  private async startRinging(): Promise<RpcResult> {
     if (!(await this.host.budget.hasCapacity())) {
       this.host.say("Calls are taking a quick break right now — let's keep going over text instead. 🙂");
       this.event("call:budget_exhausted", "");
       return { ok: false, error: "unavailable" };
     }
+    if (isCallLive(this.host.getState())) return { ok: false, error: "call_in_progress" };
     const callId = this.host.newId();
     this.host.setState(setCall(beginCallAttempt(this.host.getState()), { status: "ringing", callId, since: this.host.now() }));
     this.event("call:ringing", callId);
@@ -128,11 +140,17 @@ export class CallController {
     sb.send(commands.updateBackend({ instructions: voiceBackendInstructions(this.host.getState()) }));
   }
 
-  /** After a Durable Object restart the in-memory runtime is gone; a live call cannot be resumed. */
+  /**
+   * After a Durable Object restart the in-memory runtime is gone; a live call cannot be resumed.
+   * Runs inside onStart (blockConcurrencyWhile), so only the state transition is awaited —
+   * the follow-up (budget + model call) continues in the background.
+   */
   async recoverAfterRestart(): Promise<void> {
     const state = this.host.getState();
     if (this.runtime) return;
-    if (state.call.status === "connecting" || state.call.status === "active") await this.finish(state.call.callId, "dropped");
+    if (state.call.status === "connecting" || state.call.status === "active") {
+      this.finish(state.call.callId, "dropped").catch((err: unknown) => log("error", "restart_recovery_failed", errorFields(err)));
+    }
   }
 
   // ---- internals -------------------------------------------------------------

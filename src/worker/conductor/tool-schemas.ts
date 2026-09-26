@@ -8,6 +8,7 @@ export type ToolName =
   | "set_help_goal"
   | "send_gmail_link"
   | "check_gmail_status"
+  | "skip_gmail"
   | "start_call"
   | "end_call"
   | "graduate";
@@ -48,6 +49,12 @@ export const TOOL_SPECS: Record<ToolName, ToolSpec> = {
   },
   send_gmail_link: {
     description: "Put a 'Connect Gmail' button in the user's chat. Use when the user agrees to connect Gmail.",
+    parameters: empty,
+    args: z.object({}),
+    channels: ["text", "voice"],
+  },
+  skip_gmail: {
+    description: "Record that the user doesn't want to connect Gmail right now, so you stop asking and move on.",
     parameters: empty,
     args: z.object({}),
     channels: ["text", "voice"],

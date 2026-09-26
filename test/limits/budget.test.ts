@@ -21,3 +21,11 @@ describe("BudgetDO", () => {
     expect(await b.usedSecondsToday()).toBe(0);
   });
 });
+
+describe("BudgetDO chat turns", () => {
+  it("allows chat turns until the daily cap", async () => {
+    const b = budget(`t3-${Date.now()}`);
+    for (let i = 0; i < 3; i++) expect(await b.consumeChatTurn(3)).toBe(true);
+    expect(await b.consumeChatTurn(3)).toBe(false);
+  });
+});

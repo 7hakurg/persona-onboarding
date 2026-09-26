@@ -1,34 +1,16 @@
+import { fromB64Url, sign, toB64Url, verify } from "../security/hmac";
+
 export interface OAuthStatePayload {
   sid: string;
   nonce: string;
   exp: number;
 }
 
-const encoder = new TextEncoder();
-
-function toB64Url(bytes: Uint8Array): string {
-  let bin = "";
-  for (const b of bytes) bin += String.fromCharCode(b);
-  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-
-function fromB64Url(text: string): Uint8Array | null {
-  try {
-    const padded = text.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - (text.length % 4)) % 4);
-    return Uint8Array.from(atob(padded), (c) => c.charCodeAt(0));
-  } catch {
-    return null;
-  }
-}
-
-function hmacKey(secret: string): Promise<CryptoKey> {
-  return crypto.subtle.importKey("raw", encoder.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"]);
-}
+const CONTEXT = "oauth-state";
 
 export async function signState(secret: string, payload: OAuthStatePayload): Promise<string> {
-  const body = toB64Url(encoder.encode(JSON.stringify(payload)));
-  const sig = new Uint8Array(await crypto.subtle.sign("HMAC", await hmacKey(secret), encoder.encode(body)));
-  return `${body}.${toB64Url(sig)}`;
+  const body = toB64Url(new TextEncoder().encode(JSON.stringify(payload)));
+  return `${body}.${await sign(secret, CONTEXT, body)}`;
 }
 
 function isPayload(value: unknown): value is OAuthStatePayload {
@@ -40,10 +22,7 @@ function isPayload(value: unknown): value is OAuthStatePayload {
 export async function verifyState(secret: string, token: string, now: number): Promise<OAuthStatePayload | null> {
   const [body, sig, extra] = token.split(".");
   if (!body || !sig || extra !== undefined) return null;
-  const sigBytes = fromB64Url(sig);
-  if (!sigBytes) return null;
-  const ok = await crypto.subtle.verify("HMAC", await hmacKey(secret), sigBytes, encoder.encode(body));
-  if (!ok) return null;
+  if (!(await verify(secret, CONTEXT, body, sig))) return null;
   const json = fromB64Url(body);
   if (!json) return null;
   try {

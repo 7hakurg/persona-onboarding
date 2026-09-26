@@ -49,3 +49,10 @@ describe("fake gmail nudge", () => {
     expect(res.outputText).toMatch(/gmail/i);
   });
 });
+
+describe("fake skip gmail", () => {
+  it("maps the Skip for now chip to skip_gmail", async () => {
+    const res = await createFakeLlm().respond({ instructions: "Current goal: gmail", tools, input: [user("Skip for now")] });
+    expect(res.calls[0]?.name).toBe("skip_gmail");
+  });
+});

@@ -1,7 +1,7 @@
 import type { CardData, SessionState } from "../../shared/types";
 import type { Env } from "../env";
 import { requireSecret } from "../env";
-import { GLOBAL_BUDGET_NAME, type BudgetDO } from "../limits/budget";
+import { globalBudget } from "../limits/budget";
 import type { CallHost, ScheduledCallback } from "../live/call-controller";
 import { createLiveSession } from "../live/live-api";
 import { openSideband } from "../live/sideband";
@@ -25,7 +25,7 @@ class LiveUnavailableError extends Error {
 }
 
 export function createCallHost(agent: CallHostAgent, env: Env): CallHost {
-  const budget = () => env.BUDGET.get(env.BUDGET.idFromName(GLOBAL_BUDGET_NAME)) as unknown as DurableObjectStub<BudgetDO>;
+  const budget = () => globalBudget(env);
   const fake = env.FAKE_LLM === "1";
   return {
     getState: () => agent.state,
