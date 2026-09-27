@@ -129,7 +129,7 @@ export function Onboarding({ gmailEnabled }: { gmailEnabled: boolean }) {
             Connecting…
           </p>
         ) : view === "home" && graduated ? (
-          <HomeScreen state={state} gmailEnabled={gmailEnabled} onConnectGmail={connectGmail} onOpenChat={() => setView("chat")} />
+          <HomeScreen state={state} gmailEnabled={gmailEnabled} onConnectGmail={connectGmail} onOpenChat={() => setView("chat")} onReset={() => void reset()} />
         ) : (
           <MessagesScreen
             state={state}
@@ -138,6 +138,7 @@ export function Onboarding({ gmailEnabled }: { gmailEnabled: boolean }) {
             onSend={send}
             onCall={() => void requestCall()}
             onConnectGmail={connectGmail}
+            onReset={() => void reset()}
             {...(graduated ? { onBack: () => setView("home") } : {})}
           />
         )}

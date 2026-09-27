@@ -70,3 +70,23 @@ test("a ringing call survives a refresh and still rings", async ({ page }) => {
   await page.reload();
   await expect(page.getByRole("dialog", { name: /Incoming call/ })).toBeVisible();
 });
+
+test("the ?reset link starts a brand-new session and cleans the URL", async ({ page }) => {
+  await openFresh(page);
+  await say(page, "call yourself Nova");
+  await expect(panel(page)).toContainText("✓ Nova (text)");
+  await page.goto("/?reset");
+  await expect(conversation(page)).toContainText("what do you want to call me?");
+  await expect(panel(page)).not.toContainText("Nova");
+  expect(new URL(page.url()).search).toBe("");
+});
+
+test("the phone screen has its own start-over control (mobile has no side panel)", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openFresh(page);
+  await say(page, "call yourself Nova");
+  await expect(page.getByText("Nova", { exact: false }).first()).toBeVisible();
+  await page.getByRole("button", { name: "Start over" }).click();
+  await expect(conversation(page)).toContainText("what do you want to call me?");
+  await expect(page.getByRole("button", { name: "Call New Assistant" })).toBeVisible();
+});

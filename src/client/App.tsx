@@ -4,6 +4,11 @@ import { Onboarding } from "./components/Onboarding";
 type Gate = { status: "loading" } | { status: "ready"; gmailEnabled: boolean } | { status: "error"; message: string };
 
 async function bootstrap(): Promise<{ gmailEnabled: boolean }> {
+  // "/?reset" is a bookmarkable way to start a brand-new session.
+  if (new URLSearchParams(location.search).has("reset")) {
+    await fetch("/api/reset", { method: "POST", credentials: "same-origin" });
+    history.replaceState(null, "", "/");
+  }
   const session = await fetch("/api/session", { method: "POST", credentials: "same-origin" });
   if (session.status === 429) throw new Error("Too many new sessions from your network — try again in a minute.");
   if (!session.ok) throw new Error("Couldn't start a session. Please refresh.");

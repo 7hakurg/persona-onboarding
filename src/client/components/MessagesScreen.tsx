@@ -15,18 +15,23 @@ interface MessagesScreenProps {
   onCall: () => void;
   onConnectGmail: () => void;
   onBack?: () => void;
+  onReset: () => void;
 }
 
-export function MessagesScreen({ state, reconnecting, gmailEnabled, onSend, onCall, onConnectGmail, onBack }: MessagesScreenProps) {
+export function MessagesScreen({ state, reconnecting, gmailEnabled, onSend, onCall, onConnectGmail, onBack, onReset }: MessagesScreenProps) {
   const name = agentDisplayName(state);
   const chips = quickReplies(state);
   return (
     <div className="flex h-full min-h-0 flex-col">
       <StatusBar />
       <header className="relative flex shrink-0 flex-col items-center border-b border-neutral-200/80 bg-neutral-50/90 pb-2 pt-1 backdrop-blur">
-        {onBack && (
+        {onBack ? (
           <button type="button" onClick={onBack} className="absolute left-3 top-4 text-[17px] text-imessage" aria-label="Back to home">
             ‹ Home
+          </button>
+        ) : (
+          <button type="button" onClick={onReset} className="absolute left-3 top-5 rounded-full px-2 py-1 text-[13px] font-medium text-imessage active:bg-imessage/10">
+            Start over
           </button>
         )}
         <Avatar name={name} size={48} />

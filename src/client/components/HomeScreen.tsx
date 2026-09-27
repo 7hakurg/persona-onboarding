@@ -9,6 +9,7 @@ interface HomeScreenProps {
   onOpenChat: () => void;
   onConnectGmail: () => void;
   gmailEnabled: boolean;
+  onReset: () => void;
 }
 
 function greeting(): string {
@@ -16,7 +17,7 @@ function greeting(): string {
   return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
 }
 
-export function HomeScreen({ state, onOpenChat, onConnectGmail, gmailEnabled }: HomeScreenProps) {
+export function HomeScreen({ state, onOpenChat, onConnectGmail, gmailEnabled, onReset }: HomeScreenProps) {
   const agent = agentDisplayName(state);
   const user = slotText(state.slots.userName)?.replace(/\?$/, "");
   const goal = slotText(state.slots.helpGoal);
@@ -30,7 +31,12 @@ export function HomeScreen({ state, onOpenChat, onConnectGmail, gmailEnabled }: 
     <div className="flex h-full flex-col bg-ios-grouped">
       <StatusBar />
       <div className="no-scrollbar flex-1 overflow-y-auto px-5 pb-6 pt-4">
-        <p className="text-[13px] font-semibold uppercase tracking-wide text-neutral-500">{greeting()}</p>
+        <div className="flex items-center justify-between">
+          <p className="text-[13px] font-semibold uppercase tracking-wide text-neutral-500">{greeting()}</p>
+          <button type="button" onClick={onReset} className="text-[13px] font-medium text-imessage">
+            Start over
+          </button>
+        </div>
         <h1 className="mt-0.5 text-[30px] font-bold leading-tight tracking-tight">{user ? `Hi, ${user}` : "Welcome in"} 👋</h1>
         <div className="mt-4 flex items-center gap-3 rounded-2xl bg-white p-3.5 shadow-sm">
           <Avatar name={agent} size={44} />
