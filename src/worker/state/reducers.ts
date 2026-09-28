@@ -67,3 +67,7 @@ export function graduate(state: SessionState, now: number): SessionState {
     : ({ status: "defaulted", value: DEFAULT_AGENT_NAME } as const);
   return { ...state, graduatedAt: now, slots: { ...state.slots, agentName } };
 }
+
+export function updateMessageData(state: SessionState, id: string, data: NonNullable<ChatMessage["data"]>): SessionState {
+  return { ...state, messages: state.messages.map((m) => (m.id === id ? { ...m, data } : m)) };
+}

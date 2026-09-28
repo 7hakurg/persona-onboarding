@@ -20,7 +20,7 @@ export type GmailState =
   | { status: "link_sent"; at: number }
   | { status: "declined"; at: number }
   | { status: "connected_limited"; email: string }
-  | { status: "connected"; email: string; snapshot: InboxSnapshot; insight: string }
+  | { status: "connected"; email: string; snapshot: InboxSnapshot; insight: string; canManage?: boolean }
   | { status: "error"; reason: string };
 
 export type CallEndReason =
@@ -73,7 +73,10 @@ export interface TriageItem {
 export type CardData =
   | { card: "call"; outcome: CallEndReason; durationMs: number; transcript: TranscriptLine[] }
   | { card: "gmail"; status: "pending" | "connected" | "limited" | "declined"; email?: string }
-  | { card: "insight"; email: string; unreadCount: number; topSenders: { name: string; count: number }[]; insight: string };
+  | { card: "insight"; email: string; unreadCount: number; topSenders: { name: string; count: number }[]; insight: string }
+  | { card: "triage"; items: TriageItem[] }
+  | { card: "draft"; threadId: string; to: string; subject: string; body: string; gmailUrl: string }
+  | { card: "archived"; threadIds: string[]; count: number; undone: boolean };
 
 export interface ChatMessage {
   id: string;
