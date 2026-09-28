@@ -61,6 +61,15 @@ export interface TranscriptLine {
   text: string;
 }
 
+export interface TriageItem {
+  threadId: string;
+  from: string;
+  subject: string;
+  summary: string;
+  urgency: "high" | "medium" | "low";
+  action: "reply" | "read" | "archive" | "none";
+}
+
 export type CardData =
   | { card: "call"; outcome: CallEndReason; durationMs: number; transcript: TranscriptLine[] }
   | { card: "gmail"; status: "pending" | "connected" | "limited" | "declined"; email?: string }
