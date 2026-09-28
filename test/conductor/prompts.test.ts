@@ -38,3 +38,12 @@ describe("prompts", () => {
     expect(followupInstructions(named, "declined")).toMatch(/declined|didn't want/i);
   });
 });
+
+describe("gmail guidance", () => {
+  it("explains gmail abilities only when the assistant can manage the inbox", () => {
+    const connected = stateWith({ gmail: { status: "connected", email: "a@b.co", snapshot: { unreadCount: 1, topSenders: [], sampleSubjects: [] }, insight: "", canManage: true } });
+    expect(chatInstructions(connected)).toMatch(/never send/i);
+    expect(chatInstructions(connected)).toContain("gmail_draft_reply");
+    expect(chatInstructions(named)).not.toContain("gmail_draft_reply");
+  });
+});

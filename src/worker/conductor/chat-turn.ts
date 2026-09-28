@@ -1,16 +1,24 @@
 import type { ChatMessage, SessionState } from "../../shared/types";
 import { CONFIG } from "../config";
-import type { InputItem, LlmClient } from "../llm/types";
+import { isGmailTool } from "../gmail/tool-schemas";
+import type { FunctionTool, InputItem, LlmClient } from "../llm/types";
 import { errorFields, log } from "../log";
 import { appendMessage } from "../state/reducers";
 import { FALLBACK_REPLY, chatInstructions, defaultLine } from "./prompts";
 import type { RecordedInvocation, TurnRecord } from "./commit";
 import { executeTool, toolDefinitions, type Effect } from "./tools";
 
+export interface GmailToolExecutor {
+  tools(): FunctionTool[];
+  run(name: string, argsJson: string): Promise<{ result: Record<string, unknown>; cards: ChatMessage[] }>;
+}
+
 export interface TurnDeps {
   llm: LlmClient;
   now: () => number;
   newId: () => string;
+  /** Present when the user connected Gmail with manage access. */
+  gmail?: GmailToolExecutor;
 }
 
 export interface TurnOutcome {
@@ -50,11 +58,27 @@ export async function runChatTurn(initial: SessionState, deps: TurnDeps): Promis
   let state = initial;
   const effects: Effect[] = [];
   const invocations: RecordedInvocation[] = [];
+  const cards: ChatMessage[] = [];
+  const tools = [...toolDefinitions("text"), ...(deps.gmail?.tools() ?? [])];
   const input = contextItems(state);
   const max = CONFIG.limits.toolLoopMaxIterations;
   const done = (text: string): TurnOutcome => {
     const message = replyMessage(state, text, deps);
-    return { state: appendMessage(state, message), effects, record: { invocations, replies: [message] } };
+    const replies = [...cards, message];
+    return { state: replies.reduce(appendMessage, state), effects, record: { invocations, replies } };
+  };
+  // Gmail tools have real side effects: run once now, keep their cards, never replay them.
+  const runOne = async (name: string, argsJson: string): Promise<unknown> => {
+    if (deps.gmail && isGmailTool(name)) {
+      const out = await deps.gmail.run(name, argsJson);
+      cards.push(...out.cards);
+      return out.result;
+    }
+    const out = executeTool(state, { name, argsJson, channel: "text", now: deps.now() });
+    state = out.state;
+    effects.push(...out.effects);
+    invocations.push({ name, argsJson });
+    return out.result;
   };
   try {
     for (let iteration = 0; iteration <= max; iteration++) {
@@ -62,16 +86,13 @@ export async function runChatTurn(initial: SessionState, deps: TurnDeps): Promis
       const res = await deps.llm.respond({
         instructions: chatInstructions(state),
         input,
-        ...(allowTools ? { tools: toolDefinitions("text") } : {}),
+        ...(allowTools ? { tools } : {}),
       });
       if (!allowTools || res.calls.length === 0) return done(res.outputText);
       for (const call of res.calls) {
-        const out = executeTool(state, { name: call.name, argsJson: call.argsJson, channel: "text", now: deps.now() });
-        state = out.state;
-        effects.push(...out.effects);
-        invocations.push({ name: call.name, argsJson: call.argsJson });
+        const output = await runOne(call.name, call.argsJson);
         input.push({ type: "function_call", call_id: call.callId, name: call.name, arguments: call.argsJson });
-        input.push({ type: "function_call_output", call_id: call.callId, output: JSON.stringify(out.result) });
+        input.push({ type: "function_call_output", call_id: call.callId, output: JSON.stringify(output) });
       }
     }
   } catch (err) {

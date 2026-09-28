@@ -86,3 +86,23 @@ describe("runChatTurn", () => {
     expect(llm.requests[0]?.input).toHaveLength(CONFIG.history.chatContextMessages);
   });
 });
+
+describe("runChatTurn with gmail tools", () => {
+  it("runs gmail tools once through the injected executor and records their cards (not replayed)", async () => {
+    const ran: string[] = [];
+    const card = { id: "c1", at: NOW, role: "assistant" as const, kind: "card" as const, text: "Archived 1 thread.", data: { card: "archived" as const, threadIds: ["t1"], count: 1, undone: false } };
+    const gmail = {
+      tools: () => [{ type: "function" as const, name: "gmail_archive", description: "x", parameters: { type: "object" as const, properties: {}, required: [], additionalProperties: false as const }, strict: true as const }],
+      run: async (name: string) => { ran.push(name); return { result: { ok: true, archived: 1 }, cards: [card] }; },
+    };
+    const llm = scripted([
+      { outputText: "", calls: [{ callId: "g1", name: "gmail_archive", argsJson: "{\"thread_ids\":[\"t1\"]}" }] },
+      { outputText: "Done — archived it.", calls: [] },
+    ]);
+    const out = await runChatTurn(withUser("archive the newsletter"), { ...deps(llm), gmail });
+    expect(ran).toEqual(["gmail_archive"]);
+    expect(llm.requests[0]?.tools?.map((t) => t.name)).toContain("gmail_archive");
+    expect(out.record.invocations).toEqual([]);
+    expect(out.record.replies.map((m) => m.text)).toEqual(["Archived 1 thread.", "Done — archived it."]);
+  });
+});
