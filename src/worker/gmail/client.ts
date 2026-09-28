@@ -111,8 +111,10 @@ export class GmailClient {
   }
 
   private async request(method: "GET" | "POST", path: string, body?: unknown): Promise<unknown> {
+    // Detach before calling: the platform fetch throws "Illegal invocation" when `this` is not globalThis.
+    const doFetch = this.fetchImpl;
     for (let attempt = 0; attempt < 2; attempt++) {
-      const res = await this.fetchImpl(`${API}${path}`, {
+      const res = await doFetch(`${API}${path}`, {
         method,
         headers: { Authorization: `Bearer ${await this.tokens.get()}`, ...(body ? { "Content-Type": "application/json" } : {}) },
         ...(body ? { body: JSON.stringify(body) } : {}),

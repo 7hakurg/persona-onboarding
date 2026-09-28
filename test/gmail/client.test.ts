@@ -94,3 +94,13 @@ describe("GmailClient", () => {
     await expect(new GmailClient(tokens(["a"]).provider, impl).archive(Array.from({ length: 26 }, (_, i) => `t${i}`))).rejects.toThrow(/at most 25/);
   });
 });
+
+describe("GmailClient with the platform fetch", () => {
+  it("never calls fetch as a method (workerd throws 'Illegal invocation' for a foreign this)", async () => {
+    const nativeLike = function (this: unknown, _input: string) {
+      if (this !== undefined && this !== globalThis) throw new TypeError("Illegal invocation: function called with incorrect `this` reference.");
+      return Promise.resolve(Response.json({ threads: [] }));
+    } as unknown as typeof fetch;
+    await expect(new GmailClient({ get: async () => "a", invalidate: () => {} }, nativeLike).searchThreads("x", 1)).resolves.toEqual([]);
+  });
+});

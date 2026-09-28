@@ -53,6 +53,7 @@ async function completion(env: Env, url: URL, nonce: string): Promise<GmailCompl
   try {
     const token = await exchangeCode({ ...cfg, code, redirectUri: redirectUri(url.href) });
     const email = await fetchUserEmail(token.accessToken);
+    log("info", "gmail_grant", { canRead: token.canRead, canManage: token.canManage, hasRefreshToken: token.refreshToken !== null });
     if (!token.canRead) return { nonce, outcome: "limited", email };
     const snapshot = await fetchInboxSnapshot(token.accessToken);
     const encryptedRefreshToken = token.canManage && token.refreshToken ? await encryptString(requireSecret(env, "TOKEN_ENCRYPTION_KEY"), token.refreshToken) : null;
