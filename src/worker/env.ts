@@ -2,6 +2,8 @@ declare global {
   namespace Cloudflare {
     interface Env {
       OAUTH_STATE_SECRET: string;
+      /** ≥32 chars; encrypts stored Gmail refresh tokens. */
+      TOKEN_ENCRYPTION_KEY: string;
       GOOGLE_CLIENT_ID?: string;
       GOOGLE_CLIENT_SECRET?: string;
       /** "1" switches the LLM and Live API to deterministic fakes (tests / E2E). */
@@ -19,7 +21,7 @@ export class MissingSecretError extends Error {
   }
 }
 
-export function requireSecret(env: Env, name: "OPENAI_API_KEY" | "OAUTH_STATE_SECRET"): string {
+export function requireSecret(env: Env, name: "OPENAI_API_KEY" | "OAUTH_STATE_SECRET" | "TOKEN_ENCRYPTION_KEY"): string {
   const value = env[name];
   if (typeof value !== "string" || value.trim() === "") throw new MissingSecretError(name);
   return value;

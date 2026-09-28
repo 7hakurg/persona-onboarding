@@ -20,6 +20,8 @@ export const CONFIG = {
     ringTimeoutMs: 30_000,
     dailyVoiceMinutes: 300,
     dailyChatTurns: 5_000,
+    gmailActionsPerWindow: 30,
+    gmailActionWindowMs: 10 * 60_000,
     toolLoopMaxIterations: 4,
     maxSlotAttempts: 2,
   },

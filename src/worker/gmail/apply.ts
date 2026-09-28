@@ -36,7 +36,7 @@ export function applyGmailCompletion(state: SessionState, c: GmailCompletion, in
       };
     case "connected": {
       const text = insight ?? "";
-      const next = setGmail(logged, { status: "connected", email: c.email, snapshot: c.snapshot, insight: text });
+      const next = setGmail(logged, { status: "connected", email: c.email, snapshot: c.snapshot, insight: text, canManage: c.grant.canManage });
       return {
         state: appendMessage(next, assistant(ids, text, { card: "insight", email: c.email, unreadCount: c.snapshot.unreadCount, topSenders: c.snapshot.topSenders, insight: text })),
         callNote: `Gmail just connected (${c.email}). ${describeSnapshot(c.snapshot)} Mention one useful observation briefly.`,

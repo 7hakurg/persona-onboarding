@@ -23,6 +23,10 @@ import { applyGmailCompletion } from "../gmail/apply";
 import type { GmailCompletion } from "../gmail/completion";
 import { composeInsight } from "../gmail/insight";
 import { slotValue } from "../../shared/selectors";
+import { GmailAssistant } from "../gmail/assistant";
+import { GmailClient } from "../gmail/client";
+import type { GmailTokenStore } from "../gmail/token-store";
+import { createGmailHost, createTokenStore } from "./gmail-host";
 import { TurnQueue } from "./turn-queue";
 
 const CHAT_WINDOW_KEY = "chat-window";
@@ -36,6 +40,11 @@ export class OnboardingAgent extends Agent<Env, SessionState> {
   private readonly turns = new TurnQueue(() => this.runTurn(), CONFIG.timing.turnDebounceMs);
   private cachedLlm: LlmClient | null = null;
   private readonly calls = new CallController(createCallHost(this, this.env));
+  private tokenStore: GmailTokenStore | null = null;
+  private readonly gmail = new GmailAssistant(
+    createGmailHost(this, this.ctx.storage, () => this.gmailTokens()),
+    () => new GmailClient(this.gmailTokens().provider()),
+  );
 
   // ---- framework hooks -------------------------------------------------
 
@@ -99,6 +108,34 @@ export class OnboardingAgent extends Agent<Env, SessionState> {
     return { ok: true };
   }
 
+  @callable()
+  async gmailDraftReply(threadId: unknown, instructions: unknown): Promise<RpcResult> {
+    if (typeof threadId !== "string" || !threadId || threadId.length > 64) return { ok: false, error: "invalid" };
+    const text = typeof instructions === "string" && instructions.trim() ? instructions.trim().slice(0, 1_000) : "Write a short, friendly reply that addresses what they asked.";
+    await this.gmail.draftFromUi(threadId, text);
+    return { ok: true };
+  }
+
+  @callable()
+  async gmailArchive(threadIds: unknown): Promise<RpcResult> {
+    if (!Array.isArray(threadIds) || threadIds.length === 0 || !threadIds.every((t) => typeof t === "string" && t.length <= 64)) return { ok: false, error: "invalid" };
+    await this.gmail.archiveFromUi(threadIds as string[]);
+    return { ok: true };
+  }
+
+  @callable()
+  async gmailUndoArchive(messageId: unknown): Promise<RpcResult> {
+    if (typeof messageId !== "string") return { ok: false, error: "invalid" };
+    await this.gmail.undoArchive(messageId);
+    return { ok: true };
+  }
+
+  @callable()
+  async disconnectGmail(): Promise<RpcResult> {
+    await this.gmail.disconnect();
+    return { ok: true };
+  }
+
   // ---- server-side API (DO RPC, not exposed to browsers) ---------------------
 
   async onRingTimeout(payload: { callId: string }): Promise<void> {
@@ -135,6 +172,10 @@ export class OnboardingAgent extends Agent<Env, SessionState> {
     const out = applyGmailCompletion(this.state, result, insight, { now: Date.now(), newId: () => crypto.randomUUID() });
     this.setState(out.state);
     this.calls.notifyExternalChange(out.callNote);
+    if (result.outcome === "connected" && result.grant.canManage) {
+      await this.gmailTokens().save(result.grant.encryptedRefreshToken, result.grant);
+      this.gmail.onConnected().catch((err: unknown) => log("error", "gmail_triage_failed", errorFields(err)));
+    }
     return true;
   }
 
@@ -196,6 +237,11 @@ export class OnboardingAgent extends Agent<Env, SessionState> {
     return this.cachedLlm;
   }
 
+  private gmailTokens(): GmailTokenStore {
+    this.tokenStore ??= createTokenStore(this.ctx.storage, this.env);
+    return this.tokenStore;
+  }
+
   private async allowChatMessage(): Promise<boolean> {
     const hits = (await this.ctx.storage.get<number[]>(CHAT_WINDOW_KEY)) ?? [];
     const r = slidingWindow(hits, Date.now(), CONFIG.limits.chatMessagesPerWindow, CONFIG.limits.chatWindowMs);
@@ -211,7 +257,8 @@ export class OnboardingAgent extends Agent<Env, SessionState> {
         this.say(CHAT_BUSY_REPLY);
         return;
       }
-      const out = await runChatTurn(this.state, { llm: this.llm(), now: () => Date.now(), newId: () => crypto.randomUUID() });
+      const gmail = { tools: () => this.gmail.toolDefinitions(), run: (name: string, args: string) => this.gmail.runTool(name, args) };
+      const out = await runChatTurn(this.state, { llm: this.llm(), now: () => Date.now(), newId: () => crypto.randomUUID(), gmail });
       const committed = commitTurn(this.state, out.record, Date.now());
       this.setState(committed.state);
       for (const effect of committed.effects) await this.applyEffect(effect);

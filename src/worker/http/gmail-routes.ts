@@ -5,6 +5,7 @@ import { CONFIG } from "../config";
 import { googleConfig, requireSecret, type Env } from "../env";
 import { buildAuthUrl, exchangeCode, fetchInboxSnapshot, fetchUserEmail } from "../gmail/google";
 import { signState, verifyState } from "../gmail/oauth-state";
+import { encryptString } from "../security/crypto-box";
 import type { GmailCompletion } from "../gmail/completion";
 import { errorFields, log } from "../log";
 import { readSessionId } from "./session-cookie";
@@ -54,7 +55,9 @@ async function completion(env: Env, url: URL, nonce: string): Promise<GmailCompl
     const email = await fetchUserEmail(token.accessToken);
     if (!token.canRead) return { nonce, outcome: "limited", email };
     const snapshot = await fetchInboxSnapshot(token.accessToken);
-    return { nonce, outcome: "connected", email, snapshot };
+    const encryptedRefreshToken = token.canManage && token.refreshToken ? await encryptString(requireSecret(env, "TOKEN_ENCRYPTION_KEY"), token.refreshToken) : null;
+    const grant = { accessToken: token.accessToken, expiresInSeconds: token.expiresInSeconds, encryptedRefreshToken, canManage: token.canManage };
+    return { nonce, outcome: "connected", email, snapshot, grant };
   } catch (err) {
     log("error", "gmail_exchange_failed", errorFields(err));
     return { nonce, outcome: "error", reason: "exchange_failed" };
