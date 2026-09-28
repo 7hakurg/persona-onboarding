@@ -222,3 +222,18 @@ e2e/**                         Playwright
 - [ ] Step 3: `pnpm test --coverage` ≥ 80% on `src/worker`.
 - [ ] Step 4: `wrangler secret put` for `OPENAI_API_KEY`, `OAUTH_STATE_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`; `pnpm deploy`; smoke-test the public URL in the browser pane; README with architecture, how to test, known limits.
 - [ ] Step 5: Commit `test: e2e and deploy`.
+
+---
+
+## Addendum plan (2026-09-28): Gmail triage + drafts
+
+- G1 `security/crypto-box.ts` — encrypt/decrypt with HKDF-derived AES-GCM key; tampering/wrong key → null.
+- G2 `gmail/google.ts` — offline consent URL, exchange returns refresh token + expiry + scope flags, `refreshAccessToken`, `revokeToken`.
+- G3 `gmail/mime.ts` + `gmail/client.ts` — body extraction (text/plain preferred, HTML stripped, quotes trimmed, capped), search threads, read thread, archive/unarchive (INBOX label), reply draft (RFC 2822, In-Reply-To/References, threadId).
+- G4 `gmail/ai.ts` — triage (structured), summarize thread, draft body (structured); email content passed as data.
+- G5 `gmail/token-store.ts` + `gmail/assistant.ts` — encrypted refresh token in DO storage, cached access token; connect → triage card; tool execution; RPC actions (draft from triage, archive, undo, disconnect); per-session action window.
+- G6 `conductor/chat-turn.ts` — async Gmail tools via injected executor; cards recorded into the turn record; tool defs only when `canManage`.
+- G7 routes — callback passes an encrypted grant to the DO; new secret `TOKEN_ENCRYPTION_KEY`.
+- G8 UI — triage, draft, archived (undo) cards; Disconnect Gmail on Home.
+- G9 deploy, secrets, docs.
+Each task: failing test first, then implementation, full suite green, commit.

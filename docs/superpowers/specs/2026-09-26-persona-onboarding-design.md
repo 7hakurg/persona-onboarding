@@ -343,3 +343,14 @@ by Worker vars. Models: chat `gpt-6-luna` (reasoning effort `low`; benchmarked 2
 | OpenAI outage | Call start fails fast → `connection_failed` → text path. |
 | GPT-Live is new (2026-09-08); APIs may shift | All Live wire formats isolated in one module (`live/`) with zod-validated events; unknown events logged and ignored. |
 | DO restarts mid-call and loses the sideband | Live session id persisted; on wake the DO re-attaches; if that fails the call is ended as `dropped` and recovery runs. |
+
+## 14. Addendum (2026-09-28): Gmail triage + drafts
+
+Approved scope: help the user manage Gmail without ever sending mail.
+
+- **Scopes:** `openid email profile gmail.modify gmail.compose`, `access_type=offline`, `prompt=consent`. `gmail.modify` covers read/archive/label; `gmail.compose` covers drafts. No send scope is requested.
+- **Tokens:** the refresh token is AES-GCM encrypted (key derived via HKDF from secret `TOKEN_ENCRYPTION_KEY`) in the Worker callback and stored only in the session DO's private storage — never in synced `SessionState`, never logged. Access tokens are cached in memory until expiry and refreshed on demand. "Disconnect Gmail" revokes at Google and deletes the blob.
+- **At connect:** besides the snapshot, the DO fetches up to 5 unread threads from the last 7 days (excluding Promotions/Social), summarizes each (summary, urgency, suggested action) and posts a **"What needs you"** triage card with Draft reply / Archive buttons.
+- **Chat tools** (text channel only, only when Gmail is connected with manage access): `gmail_search(query)`, `gmail_summarize_thread(thread_id)`, `gmail_archive(thread_ids ≤ 25)` (undoable), `gmail_draft_reply(thread_id, instructions)` (creates a Gmail draft in the thread; preview card + Gmail link).
+- **Safety:** email content is untrusted data, passed to the model as quoted user-role content; worst case is a draft or an undoable archive. Gmail actions are rate limited per session (30 / 10 min). Tool calls with side effects are executed once during the turn and are not replayed at commit.
+- **State:** `GmailState.connected` gains `canManage`. New cards: `triage`, `draft`, `archived` (with `undone`).
