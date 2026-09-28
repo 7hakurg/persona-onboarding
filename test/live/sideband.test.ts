@@ -49,3 +49,13 @@ describe("openSideband", () => {
     expect(() => sb.send({ type: "session.close" })).not.toThrow();
   });
 });
+
+describe("sideband command shapes (verified against GPT-Live)", () => {
+  it("session.update names the delegation type, or GPT-Live rejects it with missing_required_parameter", async () => {
+    const { commands } = await import("../../src/worker/live/sideband");
+    expect(commands.updateBackend({ instructions: "x" })).toEqual({
+      type: "session.update",
+      session: { delegation: { type: "responses", responses: { instructions: "x" } } },
+    });
+  });
+});

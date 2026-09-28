@@ -71,6 +71,7 @@ export const commands = {
   ],
   instructions: (content: string): LiveCommand => ({ type: "session.instructions.append", delegation_id: null, content }),
   thinking: (content: string): LiveCommand => ({ type: "session.thinking.append", delegation_id: null, content }),
-  updateBackend: (responses: Record<string, unknown>): LiveCommand => ({ type: "session.update", session: { delegation: { responses } } }),
+  // GPT-Live requires the delegation type on every update, even when it is unchanged.
+  updateBackend: (responses: Record<string, unknown>): LiveCommand => ({ type: "session.update", session: { delegation: { type: "responses", responses } } }),
   close: (): LiveCommand => ({ type: "session.close" }),
 };

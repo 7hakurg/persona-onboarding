@@ -220,7 +220,7 @@ export class CallController {
         void this.finish(callId, CLOSE_REASONS[e.reason] ?? "dropped");
         return;
       case "error":
-        log("warn", "live_error", { code: e.code });
+        log("warn", "live_error", { code: e.code, detail: e.message.slice(0, 200) });
         return;
       default:
         return;
