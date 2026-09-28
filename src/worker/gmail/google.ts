@@ -113,7 +113,7 @@ export async function fetchUserEmail(token: string, fetchImpl: typeof fetch = fe
 const MessageList = z.object({ messages: z.array(z.object({ id: z.string() })).default([]), resultSizeEstimate: z.number().default(0) });
 const MessageMeta = z.object({ payload: z.object({ headers: z.array(z.object({ name: z.string(), value: z.string() })).default([]) }).default({ headers: [] }) });
 
-function senderName(from: string): string {
+export function senderName(from: string): string {
   const named = /^\s*"?([^"<]+?)"?\s*<[^>]+>\s*$/.exec(from);
   return (named?.[1] ?? from).trim().slice(0, 60);
 }
