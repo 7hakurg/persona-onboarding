@@ -2,7 +2,10 @@ import { z } from "zod";
 import type { InboxSnapshot } from "../../shared/types";
 import { CONFIG } from "../config";
 
-export const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
+export const GMAIL_READONLY = "https://www.googleapis.com/auth/gmail.readonly";
+export const GMAIL_MODIFY = "https://www.googleapis.com/auth/gmail.modify";
+export const GMAIL_COMPOSE = "https://www.googleapis.com/auth/gmail.compose";
+const REVOKE_URL = "https://oauth2.googleapis.com/revoke";
 const AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo";
@@ -26,26 +29,73 @@ export function buildAuthUrl(args: { clientId: string; redirectUri: string; stat
     redirect_uri: args.redirectUri,
     response_type: "code",
     scope: CONFIG.gmail.scopes.join(" "),
-    access_type: "online",
+    access_type: "offline",
     include_granted_scopes: "true",
-    prompt: "select_account",
+    prompt: "consent select_account",
     state: args.state,
   });
   return `${AUTH_URL}?${params}`;
 }
 
-const TokenResponse = z.object({ access_token: z.string().min(1), scope: z.string().default("") });
+const TokenResponse = z.object({
+  access_token: z.string().min(1),
+  refresh_token: z.string().min(1).optional(),
+  expires_in: z.number().default(3600),
+  scope: z.string().default(""),
+});
 
-export async function exchangeCode(args: { clientId: string; clientSecret: string; code: string; redirectUri: string; fetchImpl?: typeof fetch }): Promise<{ accessToken: string; hasGmailScope: boolean }> {
-  const res = await (args.fetchImpl ?? fetch)(TOKEN_URL, {
+export interface GoogleGrant {
+  accessToken: string;
+  refreshToken: string | null;
+  expiresInSeconds: number;
+  canRead: boolean;
+  /** Archive/label (gmail.modify) and drafts (gmail.compose). */
+  canManage: boolean;
+}
+
+async function postToken(body: Record<string, string>, fetchImpl: typeof fetch): Promise<z.infer<typeof TokenResponse>> {
+  const res = await fetchImpl(TOKEN_URL, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ code: args.code, client_id: args.clientId, client_secret: args.clientSecret, redirect_uri: args.redirectUri, grant_type: "authorization_code" }),
+    body: new URLSearchParams(body),
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
   const parsed = TokenResponse.safeParse(await res.json().catch(() => null));
   if (!res.ok || !parsed.success) throw new GoogleError("token", res.status);
-  return { accessToken: parsed.data.access_token, hasGmailScope: parsed.data.scope.split(" ").includes(GMAIL_SCOPE) };
+  return parsed.data;
+}
+
+export async function exchangeCode(args: { clientId: string; clientSecret: string; code: string; redirectUri: string; fetchImpl?: typeof fetch }): Promise<GoogleGrant> {
+  const t = await postToken(
+    { code: args.code, client_id: args.clientId, client_secret: args.clientSecret, redirect_uri: args.redirectUri, grant_type: "authorization_code" },
+    args.fetchImpl ?? fetch,
+  );
+  const scopes = new Set(t.scope.split(" "));
+  return {
+    accessToken: t.access_token,
+    refreshToken: t.refresh_token ?? null,
+    expiresInSeconds: t.expires_in,
+    canRead: scopes.has(GMAIL_MODIFY) || scopes.has(GMAIL_READONLY),
+    canManage: scopes.has(GMAIL_MODIFY) && scopes.has(GMAIL_COMPOSE),
+  };
+}
+
+export async function refreshAccessToken(args: { clientId: string; clientSecret: string; refreshToken: string; fetchImpl?: typeof fetch }): Promise<{ accessToken: string; expiresInSeconds: number }> {
+  const t = await postToken(
+    { refresh_token: args.refreshToken, client_id: args.clientId, client_secret: args.clientSecret, grant_type: "refresh_token" },
+    args.fetchImpl ?? fetch,
+  );
+  return { accessToken: t.access_token, expiresInSeconds: t.expires_in };
+}
+
+/** Best-effort revocation; Google returns 400 for already-invalid tokens, which is fine. */
+export async function revokeToken(token: string, fetchImpl: typeof fetch = fetch): Promise<void> {
+  await fetchImpl(REVOKE_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ token }),
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  });
 }
 
 async function getJson(url: string, token: string, step: GoogleError["step"], fetchImpl: typeof fetch): Promise<unknown> {

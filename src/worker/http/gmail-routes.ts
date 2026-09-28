@@ -52,7 +52,7 @@ async function completion(env: Env, url: URL, nonce: string): Promise<GmailCompl
   try {
     const token = await exchangeCode({ ...cfg, code, redirectUri: redirectUri(url.href) });
     const email = await fetchUserEmail(token.accessToken);
-    if (!token.hasGmailScope) return { nonce, outcome: "limited", email };
+    if (!token.canRead) return { nonce, outcome: "limited", email };
     const snapshot = await fetchInboxSnapshot(token.accessToken);
     return { nonce, outcome: "connected", email, snapshot };
   } catch (err) {

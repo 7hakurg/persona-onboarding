@@ -2,7 +2,7 @@ import { exports } from "cloudflare:workers";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import "../../src/worker/index";
 import { agentNamed } from "../agent/helpers";
-import { GMAIL_SCOPE } from "../../src/worker/gmail/google";
+import { GMAIL_COMPOSE, GMAIL_MODIFY } from "../../src/worker/gmail/google";
 
 const ORIGIN = "https://persona.test";
 
@@ -23,7 +23,7 @@ async function startFlow(cookie: string): Promise<string> {
   return loc.searchParams.get("state")!;
 }
 
-function stubGoogle(scope = `openid email ${GMAIL_SCOPE}`) {
+function stubGoogle(scope = `openid email ${GMAIL_MODIFY} ${GMAIL_COMPOSE}`) {
   const real = globalThis.fetch;
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = String(input instanceof Request ? input.url : input);
