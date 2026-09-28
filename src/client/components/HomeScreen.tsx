@@ -2,6 +2,7 @@ import type { SessionState } from "../../shared/types";
 import { agentDisplayName, slotText } from "../lib/derive";
 import { Avatar } from "./Avatar";
 import { InsightCard } from "./cards/InsightCard";
+import { TriageCard, type GmailActions } from "./cards/TriageCard";
 import { StatusBar } from "./StatusBar";
 
 interface HomeScreenProps {
@@ -10,6 +11,8 @@ interface HomeScreenProps {
   onConnectGmail: () => void;
   gmailEnabled: boolean;
   onReset: () => void;
+  onDisconnectGmail: () => void;
+  gmailActions: GmailActions;
 }
 
 function greeting(): string {
@@ -17,7 +20,9 @@ function greeting(): string {
   return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
 }
 
-export function HomeScreen({ state, onOpenChat, onConnectGmail, gmailEnabled, onReset }: HomeScreenProps) {
+export function HomeScreen({ state, onOpenChat, onConnectGmail, gmailEnabled, onReset, onDisconnectGmail, gmailActions }: HomeScreenProps) {
+  const triage = [...state.messages].reverse().find((m) => m.data?.card === "triage")?.data;
+  const archivedIds = new Set(state.messages.flatMap((m) => (m.data?.card === "archived" && !m.data.undone ? m.data.threadIds : [])));
   const agent = agentDisplayName(state);
   const user = slotText(state.slots.userName)?.replace(/\?$/, "");
   const goal = slotText(state.slots.helpGoal);
@@ -53,6 +58,11 @@ export function HomeScreen({ state, onOpenChat, onConnectGmail, gmailEnabled, on
             <InsightCard data={{ card: "insight", email: gmail.email, unreadCount: gmail.snapshot.unreadCount, topSenders: gmail.snapshot.topSenders, insight: gmail.insight }} />
           </div>
         )}
+        {triage?.card === "triage" && triage.items.length > 0 && (
+          <div className="mt-4 [&>div]:w-full">
+            <TriageCard items={triage.items} archivedIds={archivedIds} actions={gmailActions} />
+          </div>
+        )}
         <h2 className="mb-1.5 mt-6 px-1 text-[13px] font-semibold uppercase tracking-wide text-neutral-500">What {agent} knows</h2>
         <dl className="divide-y divide-neutral-100 rounded-2xl bg-white shadow-sm">
           {facts.map(([k, v]) => (
@@ -62,6 +72,11 @@ export function HomeScreen({ state, onOpenChat, onConnectGmail, gmailEnabled, on
             </div>
           ))}
         </dl>
+        {(gmail.status === "connected" || gmail.status === "connected_limited") && (
+          <button type="button" onClick={onDisconnectGmail} className="mt-4 w-full rounded-2xl bg-white py-3 text-[15px] font-medium text-ios-red shadow-sm">
+            Disconnect Gmail
+          </button>
+        )}
         {gmail.status !== "connected" && gmail.status !== "connected_limited" && gmailEnabled && (
           <button type="button" onClick={onConnectGmail} className="mt-4 w-full rounded-2xl bg-white py-3 text-[15px] font-semibold text-imessage shadow-sm">
             Connect Gmail

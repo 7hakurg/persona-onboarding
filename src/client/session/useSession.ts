@@ -13,6 +13,10 @@ export interface SessionApi {
   acceptCall(sdp: string): Promise<AcceptCallResult>;
   declineCall(): Promise<RpcResult>;
   endCall(reason: "user_hangup" | "page_closed" | "mic_denied" | "connection_failed"): Promise<RpcResult>;
+  gmailDraftReply(threadId: string): Promise<RpcResult>;
+  gmailArchive(threadIds: string[]): Promise<RpcResult>;
+  gmailUndoArchive(messageId: string): Promise<RpcResult>;
+  disconnectGmail(): Promise<RpcResult>;
 }
 
 const UNAVAILABLE: RpcResult = { ok: false, error: "unavailable" };
@@ -56,5 +60,9 @@ export function useSession(): SessionApi {
     acceptCall: (sdp) => invoke<AcceptCallResult>("acceptCall", [sdp], { ok: false, error: "unavailable" }),
     declineCall: () => invoke("declineCall", [], UNAVAILABLE),
     endCall: (reason) => invoke("endCall", [reason], UNAVAILABLE),
+    gmailDraftReply: (threadId) => invoke("gmailDraftReply", [threadId, ""], UNAVAILABLE),
+    gmailArchive: (threadIds) => invoke("gmailArchive", [threadIds], UNAVAILABLE),
+    gmailUndoArchive: (messageId) => invoke("gmailUndoArchive", [messageId], UNAVAILABLE),
+    disconnectGmail: () => invoke("disconnectGmail", [], UNAVAILABLE),
   };
 }

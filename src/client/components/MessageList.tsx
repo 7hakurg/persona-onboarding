@@ -3,7 +3,10 @@ import type { ChatMessage, GmailState } from "../../shared/types";
 import { formatTime } from "../lib/copy";
 import { CallCard } from "./cards/CallCard";
 import { GmailCard } from "./cards/GmailCard";
+import { ArchivedCard } from "./cards/ArchivedCard";
+import { DraftCard } from "./cards/DraftCard";
 import { InsightCard } from "./cards/InsightCard";
+import { TriageCard, type GmailActions } from "./cards/TriageCard";
 
 interface MessageListProps {
   messages: ChatMessage[];
@@ -11,11 +14,17 @@ interface MessageListProps {
   gmail: GmailState;
   gmailEnabled: boolean;
   onConnectGmail: () => void;
+  gmailActions: GmailActions;
 }
 
 const GAP_FOR_TIMESTAMP_MS = 10 * 60_000;
 
-function Card({ m, gmail, gmailEnabled, onConnectGmail }: { m: ChatMessage } & Omit<MessageListProps, "messages" | "typing">) {
+interface CardProps extends Omit<MessageListProps, "messages" | "typing"> {
+  m: ChatMessage;
+  archivedIds: ReadonlySet<string>;
+}
+
+function Card({ m, gmail, gmailEnabled, onConnectGmail, gmailActions, archivedIds }: CardProps) {
   switch (m.data?.card) {
     case "gmail":
       return <GmailCard gmail={gmail} enabled={gmailEnabled} onConnect={onConnectGmail} />;
@@ -23,12 +32,26 @@ function Card({ m, gmail, gmailEnabled, onConnectGmail }: { m: ChatMessage } & O
       return <InsightCard data={m.data} />;
     case "call":
       return <CallCard data={m.data} />;
+    case "triage":
+      return <TriageCard items={m.data.items} archivedIds={archivedIds} actions={gmailActions} />;
+    case "draft":
+      return <DraftCard data={m.data} />;
+    case "archived":
+      return <ArchivedCard data={m.data} onUndo={() => gmailActions.undoArchive(m.id)} />;
     default:
       return null;
   }
 }
 
-export function MessageList({ messages, typing, gmail, gmailEnabled, onConnectGmail }: MessageListProps) {
+/** Threads currently archived (and not undone) — hides their triage actions. */
+function archivedThreadIds(messages: ChatMessage[]): Set<string> {
+  const ids = new Set<string>();
+  for (const m of messages) if (m.data?.card === "archived" && !m.data.undone) m.data.threadIds.forEach((id) => ids.add(id));
+  return ids;
+}
+
+export function MessageList({ messages, typing, gmail, gmailEnabled, onConnectGmail, gmailActions }: MessageListProps) {
+  const archivedIds = archivedThreadIds(messages);
   const listRef = useRef<HTMLDivElement>(null);
   const mounted = useRef(false);
   useEffect(() => {
@@ -53,8 +76,8 @@ export function MessageList({ messages, typing, gmail, gmailEnabled, onConnectGm
             <div className={`flex ${out ? "justify-end" : "justify-start"} ${tail ? "mb-2" : "mb-0.5"}`}>
               {m.kind === "card" ? (
                 <div className="flex w-full flex-col items-start gap-1.5">
-                  {m.text && m.data?.card !== "insight" && m.data?.card !== "call" && <div className="bubble bubble-in">{m.text}</div>}
-                  <Card m={m} gmail={gmail} gmailEnabled={gmailEnabled} onConnectGmail={onConnectGmail} />
+                  {m.text && m.data?.card !== "insight" && m.data?.card !== "call" && m.data?.card !== "archived" && <div className="bubble bubble-in">{m.text}</div>}
+                  <Card m={m} gmail={gmail} gmailEnabled={gmailEnabled} onConnectGmail={onConnectGmail} gmailActions={gmailActions} archivedIds={archivedIds} />
                 </div>
               ) : (
                 <div className={`bubble ${out ? "bubble-out" : "bubble-in"} ${tail ? (out ? "tail-out" : "tail-in") : ""}`}>{m.text}</div>

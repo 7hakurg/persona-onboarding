@@ -29,7 +29,8 @@ Browser ══ WebRTC ══ GPT-Live (gpt-live-1), delegating to gpt-6-luna
 
 - **One brain, two channels.** Chat and voice share one tool registry (`src/worker/conductor/tools.ts`), one set of validators, and one prompt builder. Models propose; the server validates and decides. Permissions per channel are enforced in code: for example, the voice call never *asks* for the assistant's name.
 - **Recovery.** The call state machine (`src/worker/live/call-controller.ts`) maps every end reason to a follow-up: decline, no answer, mic blocked, hang-up, network drop, tab closed, time limit, moderation, or budget. After a call, an extraction pass over the transcript recovers facts the voice model didn't save.
-- **Privacy.** The Gmail access token exists only inside the OAuth callback request. The server stores only an inbox snapshot (unread count, top senders) and one insight.
+- **Gmail help (never sends).** On connect, a "What needs you" card triages up to 5 unread threads with Draft reply / Archive buttons. Afterwards you can ask in chat to search, summarize, archive (undoable), or draft replies — drafts are saved in Gmail, never sent (no send scope is requested).
+- **Privacy.** Only an AES-GCM-encrypted refresh token is stored (in the session's private Durable Object storage, never in synced state or logs); access tokens live in memory. "Disconnect Gmail" revokes access at Google. Email content is treated as untrusted data in every prompt.
 - **Guardrails.** HttpOnly session cookie with a same-origin check, and the browser never learns its session id. Per-session chat rate limit, per-IP session limit, 5 calls per session, 5 minutes per call, a global daily voice-minute budget, and CSP.
 
 ## Develop
@@ -45,6 +46,6 @@ pnpm test:e2e:live               # real GPT-Live calls with a scripted fake micr
 pnpm run deploy
 ```
 
-Google OAuth needs `https://<host>/auth/google/callback` registered on the OAuth client and the Gmail API enabled. While the consent screen is in Testing mode, testers must be added as test users. Users who uncheck inbox access still finish onboarding (`connected_limited`).
+Google OAuth needs `https://<host>/auth/google/callback` registered on the OAuth client, the Gmail API enabled, and the scopes `gmail.modify` + `gmail.compose` added under Data Access. While the consent screen is in Testing mode, testers must be added as test users. Users who uncheck inbox access still finish onboarding (`connected_limited`).
 
 Design spec: `docs/superpowers/specs/2026-09-26-persona-onboarding-design.md`. Plan: `docs/superpowers/plans/2026-09-26-persona-onboarding.md`.

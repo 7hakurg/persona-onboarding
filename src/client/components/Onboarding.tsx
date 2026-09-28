@@ -106,6 +106,19 @@ export function Onboarding({ gmailEnabled }: { gmailEnabled: boolean }) {
     void session.endCall("user_hangup");
   };
 
+  const toastOnError = (res: { ok: boolean; error?: keyof typeof ERROR_COPY }) => {
+    if (!res.ok && res.error) setToast(ERROR_COPY[res.error]);
+  };
+  const gmailActions = {
+    draft: async (threadId: string) => toastOnError(await session.gmailDraftReply(threadId)),
+    archive: async (threadIds: string[]) => toastOnError(await session.gmailArchive(threadIds)),
+    undoArchive: async (messageId: string) => toastOnError(await session.gmailUndoArchive(messageId)),
+  };
+  const disconnectGmail = async () => {
+    if (!window.confirm("Disconnect Gmail? I'll revoke my access and forget the connection.")) return;
+    toastOnError(await session.disconnectGmail());
+  };
+
   const connectGmail = () => {
     const popup = window.open("/auth/google/start", "persona-gmail", GMAIL_POPUP);
     if (!popup) location.href = "/auth/google/start";
@@ -129,7 +142,7 @@ export function Onboarding({ gmailEnabled }: { gmailEnabled: boolean }) {
             Connecting…
           </p>
         ) : view === "home" && graduated ? (
-          <HomeScreen state={state} gmailEnabled={gmailEnabled} onConnectGmail={connectGmail} onOpenChat={() => setView("chat")} onReset={() => void reset()} />
+          <HomeScreen state={state} gmailEnabled={gmailEnabled} onConnectGmail={connectGmail} onOpenChat={() => setView("chat")} onReset={() => void reset()} onDisconnectGmail={() => void disconnectGmail()} gmailActions={gmailActions} />
         ) : (
           <MessagesScreen
             state={state}
@@ -139,6 +152,7 @@ export function Onboarding({ gmailEnabled }: { gmailEnabled: boolean }) {
             onCall={() => void requestCall()}
             onConnectGmail={connectGmail}
             onReset={() => void reset()}
+            gmailActions={gmailActions}
             {...(graduated ? { onBack: () => setView("home") } : {})}
           />
         )}

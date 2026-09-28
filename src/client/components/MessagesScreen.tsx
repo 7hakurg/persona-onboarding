@@ -2,6 +2,7 @@ import type { SessionState } from "../../shared/types";
 import { quickReplies } from "../../shared/selectors";
 import { agentDisplayName, isCallLive } from "../lib/derive";
 import { Avatar } from "./Avatar";
+import type { GmailActions } from "./cards/TriageCard";
 import { Composer } from "./Composer";
 import { MessageList } from "./MessageList";
 import { QuickReplies } from "./QuickReplies";
@@ -16,9 +17,10 @@ interface MessagesScreenProps {
   onConnectGmail: () => void;
   onBack?: () => void;
   onReset: () => void;
+  gmailActions: GmailActions;
 }
 
-export function MessagesScreen({ state, reconnecting, gmailEnabled, onSend, onCall, onConnectGmail, onBack, onReset }: MessagesScreenProps) {
+export function MessagesScreen({ state, reconnecting, gmailEnabled, onSend, onCall, onConnectGmail, onBack, onReset, gmailActions }: MessagesScreenProps) {
   const name = agentDisplayName(state);
   const chips = quickReplies(state);
   return (
@@ -49,7 +51,7 @@ export function MessagesScreen({ state, reconnecting, gmailEnabled, onSend, onCa
         </button>
         {reconnecting && <p className="mt-1 text-[11px] text-ios-red">Reconnecting…</p>}
       </header>
-      <MessageList messages={state.messages} typing={state.turnPending} gmail={state.gmail} gmailEnabled={gmailEnabled} onConnectGmail={onConnectGmail} />
+      <MessageList messages={state.messages} typing={state.turnPending} gmail={state.gmail} gmailEnabled={gmailEnabled} onConnectGmail={onConnectGmail} gmailActions={gmailActions} />
       <QuickReplies options={chips} onPick={(label) => void onSend(label)} />
       <Composer disabled={reconnecting} placeholder="iMessage" onSend={onSend} />
     </div>
